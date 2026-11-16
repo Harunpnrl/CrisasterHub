@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.control.ToggleButton?>
+<?import javafx.scene.control.ToggleGroup?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.shape.Circle?>
+<?import javafx.scene.shape.SVGPath?>
+<?import javafx.scene.web.WebView?>
+
+<BorderPane prefHeight="860.0" prefWidth="1280.0" styleClass="root-canvas" stylesheets="@../css/victim.css"
+            xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.pnrl.crisasterhub.VictimController">
+    <!-- TOP APP BAR -->
+    <top>
+        <StackPane styleClass="top-navbar">
+            <padding>
+                <Insets bottom="16.0" left="36.0" right="36.0" top="16.0"/>
+            </padding>
+            <!-- Sol: Marka Logosu -->
+            <HBox alignment="CENTER_LEFT" spacing="12.0" StackPane.alignment="CENTER_LEFT">
+                <StackPane styleClass="brand-icon-box">
+                    <SVGPath
+                            content="M19 13h-4.17l2.95-2.95-1.41-1.41L13.41 11.6V7h-2v4.59L8.46 8.64 7.05 10.05 10 13H5v2h5l-2.95 2.95 1.41 1.41 2.95-2.95V21h2v-4.59l2.95 2.95 1.41-1.41L14.83 15H19v-2z"
+                            scaleX="0.85" scaleY="0.85" styleClass="brand-icon-svg"/>
+                </StackPane>
+                <HBox alignment="CENTER_LEFT">
+                    <Label styleClass="brand-title-main" text="Crisaster"/>
+                    <Label styleClass="brand-title-accent" text="HUB"/>
+                </HBox>
+            </HBox>
+            <!-- Orta: Panel Başlığı -->
+            <VBox alignment="CENTER" mouseTransparent="true" StackPane.alignment="CENTER">
+                <Label styleClass="panel-header-badge" text="VICTIM PANEL"/>
+            </VBox>
+            <!-- Sağ: Log Out Butonu -->
+            <HBox alignment="CENTER_RIGHT" StackPane.alignment="CENTER_RIGHT">
+                <Button fx:id="logoutBtn" onAction="#handleLogout" styleClass="logout-btn" text="Log Out">
+                    <graphic>
+                        <SVGPath
+                                content="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"
+                                scaleX="0.75" scaleY="0.75" styleClass="logout-icon"/>
+                    </graphic>
+                </Button>
+            </HBox>
+        </StackPane>
+    </top>
+    <!-- ANA İÇERİK ALANI -->
+    <center>
+        <ScrollPane fitToWidth="true" styleClass="main-scroll">
+            <HBox alignment="TOP_CENTER" spacing="32.0">
+                <padding>
+                    <Insets bottom="36.0" left="44.0" right="44.0" top="32.0"/>
+                </padding>
+                <!-- SOL SÜTUN: REQUEST ASSISTANCE + INTERACTIVE MAP -->
+                <VBox maxWidth="720.0" spacing="24.0" HBox.hgrow="ALWAYS">
+                    <!-- Başlık Bloğu -->
+                    <VBox spacing="8.0">
+                        <Label styleClass="page-title" text="Request Assistance"/>
+                        <Label styleClass="page-subtitle"
+                               text="Submit your needs to the central command. Priority is determined by urgency and resource proximity."
+                               wrapText="true"/>
+                    </VBox>
+                    <!-- Glassmorphism Form Kartı -->
+                    <VBox spacing="22.0" styleClass="glass-panel">
+                        <padding>
+                            <Insets bottom="30.0" left="30.0" right="30.0" top="30.0"/>
+                        </padding>
+                        <!-- Kategori ve Aciliyet Yan Yana -->
+                        <HBox spacing="20.0">
+                            <!-- Category -->
+                            <VBox spacing="8.0" HBox.hgrow="ALWAYS">
+                                <Label styleClass="field-label" text="CATEGORY"/>
+                                <ComboBox fx:id="categoryCombo" maxWidth="Infinity" promptText="Select Category"
+                                          styleClass="dark-combo"/>
+                            </VBox>
+                            <!-- Urgency Level -->
+                            <VBox spacing="8.0" HBox.hgrow="ALWAYS">
+                                <Label styleClass="field-label" text="URGENCY LEVEL"/>
+                                <HBox spacing="8.0">
+                                    <fx:define>
+                                        <ToggleGroup fx:id="urgencyGroup"/>
+                                    </fx:define>
+                                    <ToggleButton fx:id="urgencyLowBtn" maxWidth="Infinity" styleClass="urgency-chip"
+                                                  text="Low" toggleGroup="$urgencyGroup" HBox.hgrow="ALWAYS"/>
+                                    <ToggleButton fx:id="urgencyMediumBtn" maxWidth="Infinity" styleClass="urgency-chip"
+                                                  text="Medium" toggleGroup="$urgencyGroup" HBox.hgrow="ALWAYS"/>
+                                    <ToggleButton fx:id="urgencyHighBtn" maxWidth="Infinity" selected="true"
+                                                  styleClass="urgency-chip-high" text="High" toggleGroup="$urgencyGroup"
+                                                  HBox.hgrow="ALWAYS"/>
+                                </HBox>
+                            </VBox>
+                        </HBox>
+                        <!-- Description of Need -->
+                        <VBox spacing="8.0">
+                            <Label styleClass="field-label" text="DESCRIPTION OF NEED"/>
+                            <TextArea fx:id="descriptionArea" prefRowCount="3"
+                                      promptText="Detail your current situation, location landmarks, and specific requirements..."
+                                      styleClass="dark-textarea" wrapText="true"/>
+                        </VBox>
+                        <!-- Etkileşimli Harita Bölümü (Location Pin) -->
+                        <VBox spacing="8.0">
+                            <HBox alignment="CENTER_LEFT">
+                                <Label styleClass="field-label" text="PINPOINT YOUR LOCATION ON MAP"/>
+                                <Region HBox.hgrow="ALWAYS"/>
+                                <HBox alignment="CENTER_RIGHT" spacing="8.0" styleClass="map-badge-pill">
+                                    <Circle radius="4.0" styleClass="pulse-dot"/>
+                                    <Label fx:id="mapStatusLabel" styleClass="map-status-text"
+                                           text="CLICK ON MAP TO SET PIN"/>
+                                </HBox>
+                            </HBox>
+                            <StackPane prefHeight="210.0" styleClass="map-container-frame">
+                                <WebView fx:id="mapWebView" prefHeight="210.0"/>
+                            </StackPane>
+                        </VBox>
+                        <!-- Submit Butonu -->
+                        <Button fx:id="submitRequestBtn" maxWidth="Infinity" onAction="#handleSubmitRequest"
+                                styleClass="primary-gradient-cta" text="Submit Emergency Request"/>
+                    </VBox>
+                </VBox>
+                <!-- SAĞ SÜTUN: MY REQUESTS LİSTESİ -->
+                <VBox maxWidth="500.0" minWidth="380.0" spacing="22.0" HBox.hgrow="ALWAYS">
+                    <!-- Başlık + Alt Çizgi -->
+                    <VBox spacing="8.0">
+                        <Label styleClass="section-title" text="My Requests"/>
+                        <Region maxWidth="48.0" prefHeight="4.0" styleClass="title-accent-bar"/>
+                    </VBox>
+                    <!-- Dinamik Talep Kartları Konteyneri (VictimController.renderRequests doldurur) -->
+                    <VBox fx:id="requestsContainer" spacing="14.0"/>
+                </VBox>
+            </HBox>
+        </ScrollPane>
+    </center>
+</BorderPane>

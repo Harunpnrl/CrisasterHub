@@ -1,0 +1,356 @@
+/* ==========================================================================
+   CrisasterHUB - Victim Panel Stylesheet
+   ========================================================================== */
+
+.root-canvas {
+    -fx-background-color: radial-gradient(focus-angle 45deg, focus-distance 20%, center 85% 15%, radius 90%, #1e2e4f 0%, #081328 100%);
+    -fx-font-family: "Inter", "Segoe UI", sans-serif;
+}
+
+.main-scroll {
+    -fx-background-color: transparent;
+    -fx-background: transparent;
+    -fx-border-color: transparent;
+}
+
+.main-scroll > .viewport {
+    -fx-background-color: transparent;
+}
+
+/* Top Navigation Bar */
+.top-navbar {
+    -fx-background-color: rgba(25, 35, 57, 0.88);
+    -fx-border-color: transparent transparent rgba(49, 72, 122, 0.35) transparent;
+    -fx-border-width: 0 0 1px 0;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.25), 24, 0.1, 0, 8);
+}
+
+.brand-icon-box {
+    -fx-background-color: rgba(176, 198, 255, 0.18);
+    -fx-border-color: rgba(176, 198, 255, 0.4);
+    -fx-border-radius: 10px;
+    -fx-background-radius: 10px;
+    -fx-pref-width: 36px;
+    -fx-pref-height: 36px;
+}
+
+.brand-icon-svg {
+    -fx-fill: #b0c6ff;
+}
+
+.brand-title-main {
+    -fx-font-family: "Manrope", "Segoe UI", sans-serif;
+    -fx-font-size: 20px;
+    -fx-font-weight: 800;
+    -fx-text-fill: #ffffff;
+}
+
+.brand-title-accent {
+    -fx-font-family: "Manrope", "Segoe UI", sans-serif;
+    -fx-font-size: 20px;
+    -fx-font-weight: 800;
+    -fx-text-fill: #b0c6ff;
+}
+
+.panel-header-badge {
+    -fx-font-family: "Manrope", "Segoe UI", sans-serif;
+    -fx-font-size: 16px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #b0c6ff;
+    -fx-padding: 0 0 4px 0;
+    -fx-border-color: transparent transparent #b0c6ff transparent;
+    -fx-border-width: 0 0 2px 0;
+}
+
+.logout-btn {
+    -fx-background-color: rgba(32, 42, 64, 0.65);
+    -fx-background-radius: 10px;
+    -fx-border-color: rgba(68, 70, 79, 0.45);
+    -fx-border-radius: 10px;
+    -fx-text-fill: #c5c6d0;
+    -fx-font-size: 13px;
+    -fx-font-weight: 600;
+    -fx-padding: 8px 18px;
+    -fx-graphic-text-gap: 8px;
+    -fx-cursor: hand;
+}
+
+.logout-btn:hover {
+    -fx-background-color: rgba(49, 72, 122, 0.35);
+    -fx-text-fill: #ffffff;
+}
+
+.logout-icon {
+    -fx-fill: #c5c6d0;
+}
+
+.logout-btn:hover .logout-icon {
+    -fx-fill: #ffffff;
+}
+
+/* Başlıklar */
+.page-title {
+    -fx-font-family: "Manrope", "Segoe UI", sans-serif;
+    -fx-font-size: 38px;
+    -fx-font-weight: 800;
+    -fx-text-fill: #d9e2ff;
+}
+
+.page-subtitle {
+    -fx-font-size: 15px;
+    -fx-text-fill: #c5c6d0;
+}
+
+.section-title {
+    -fx-font-family: "Manrope", "Segoe UI", sans-serif;
+    -fx-font-size: 26px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #d9e2ff;
+}
+
+.title-accent-bar {
+    -fx-background-color: #b0c6ff;
+    -fx-background-radius: 99px;
+}
+
+/* Glassmorphism Form Paneli */
+.glass-panel {
+    -fx-background-color: rgba(25, 35, 57, 0.65);
+    -fx-background-radius: 16px;
+    -fx-border-color: rgba(68, 70, 79, 0.3);
+    -fx-border-radius: 16px;
+    -fx-border-width: 1px;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.35), 32, 0.15, 0, 12);
+}
+
+.field-label {
+    -fx-font-size: 11px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #a5c9f9;
+}
+
+/* ComboBox (Category) */
+.dark-combo {
+    -fx-background-color: rgba(43, 52, 75, 0.55);
+    -fx-background-radius: 8px 8px 0 0;
+    -fx-border-color: transparent transparent #44464f transparent;
+    -fx-border-width: 0 0 2px 0;
+    -fx-padding: 6px 8px;
+    -fx-font-size: 13px;
+    -fx-cursor: hand;
+}
+
+.dark-combo .list-cell {
+    -fx-text-fill: #d9e2ff;
+    -fx-background-color: transparent;
+}
+
+.dark-combo:focused {
+    -fx-border-color: transparent transparent #b0c6ff transparent;
+}
+
+.dark-combo .arrow-button .arrow {
+    -fx-background-color: #a5c9f9;
+}
+
+.dark-combo .list-view {
+    -fx-background-color: #151f35;
+    -fx-border-color: #31487a;
+}
+
+.dark-combo .list-view .list-cell {
+    -fx-background-color: #151f35;
+    -fx-text-fill: #d9e2ff;
+    -fx-padding: 10px 14px;
+}
+
+.dark-combo .list-view .list-cell:hover,
+.dark-combo .list-view .list-cell:selected {
+    -fx-background-color: #31487a;
+    -fx-text-fill: #ffffff;
+}
+
+/* Urgency Level Butonları */
+.urgency-chip, .urgency-chip-high {
+    -fx-background-color: #202a40;
+    -fx-background-radius: 8px;
+    -fx-border-color: rgba(68, 70, 79, 0.25);
+    -fx-border-radius: 8px;
+    -fx-text-fill: #c5c6d0;
+    -fx-font-size: 13px;
+    -fx-font-weight: 700;
+    -fx-padding: 11px 8px;
+    -fx-cursor: hand;
+}
+
+.urgency-chip:hover, .urgency-chip-high:hover {
+    -fx-background-color: rgba(176, 198, 255, 0.18);
+}
+
+.urgency-chip:selected {
+    -fx-background-color: #31487a;
+    -fx-text-fill: #d9e2ff;
+    -fx-border-color: #b0c6ff;
+}
+
+.urgency-chip-high:selected {
+    -fx-background-color: rgba(165, 201, 249, 0.2);
+    -fx-text-fill: #a5c9f9;
+    -fx-border-color: rgba(165, 201, 249, 0.55);
+    -fx-border-width: 1.5px;
+    -fx-effect: dropshadow(gaussian, rgba(165, 201, 249, 0.25), 14, 0.2, 0, 0);
+}
+
+/* TextArea (Description) */
+.dark-textarea {
+    -fx-background-color: rgba(43, 52, 75, 0.55);
+    -fx-background-radius: 8px 8px 0 0;
+    -fx-border-color: transparent transparent #44464f transparent;
+    -fx-border-width: 0 0 2px 0;
+    -fx-text-fill: #d9e2ff;
+    -fx-prompt-text-fill: rgba(197, 198, 208, 0.35);
+    -fx-font-size: 13px;
+}
+
+.dark-textarea .content {
+    -fx-background-color: transparent;
+    -fx-padding: 12px;
+}
+
+.dark-textarea:focused {
+    -fx-border-color: transparent transparent #b0c6ff transparent;
+}
+
+/* Harita Alanı */
+.map-container-frame {
+    -fx-background-color: #081328;
+    -fx-background-radius: 12px;
+    -fx-border-color: rgba(165, 201, 249, 0.35);
+    -fx-border-radius: 12px;
+    -fx-border-width: 1.5px;
+    -fx-padding: 2px;
+}
+
+.map-badge-pill {
+    -fx-background-color: rgba(8, 19, 40, 0.85);
+    -fx-background-radius: 99px;
+    -fx-border-color: rgba(165, 201, 249, 0.3);
+    -fx-border-radius: 99px;
+    -fx-padding: 4px 12px;
+}
+
+.pulse-dot {
+    -fx-fill: #a5c9f9;
+    -fx-effect: dropshadow(gaussian, #a5c9f9, 10, 0.6, 0, 0);
+}
+
+.map-status-text {
+    -fx-font-size: 10px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #a5c9f9;
+}
+
+/* Primary CTA Button */
+.primary-gradient-cta {
+    -fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #31487a 0%, #1e2e4f 100%);
+    -fx-background-radius: 12px;
+    -fx-text-fill: #d9e2ff;
+    -fx-font-family: "Manrope", "Segoe UI", sans-serif;
+    -fx-font-size: 16px;
+    -fx-font-weight: 700;
+    -fx-padding: 16px 24px;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.4), 20, 0.2, 0, 6);
+}
+
+.primary-gradient-cta:hover {
+    -fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #3b5691 0%, #24375e 100%);
+}
+
+.primary-gradient-cta:pressed {
+    -fx-scale-x: 0.98;
+    -fx-scale-y: 0.98;
+}
+
+/* Sağ Sütun - Dinamik Talep Kartları (renderRequests Sınıfları) */
+.req-card {
+    -fx-background-color: rgba(25, 35, 57, 0.65);
+    -fx-background-radius: 14px;
+    -fx-padding: 20px 22px;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.25), 16, 0.1, 0, 4);
+}
+
+.req-card:hover {
+    -fx-background-color: #202a40;
+}
+
+.req-card-outline {
+    -fx-border-color: rgba(68, 70, 79, 0.25) rgba(68, 70, 79, 0.25) rgba(68, 70, 79, 0.25) #8e909a;
+    -fx-border-width: 1px 1px 1px 4px;
+    -fx-border-radius: 14px;
+}
+
+.req-card-tertiary {
+    -fx-border-color: rgba(68, 70, 79, 0.25) rgba(68, 70, 79, 0.25) rgba(68, 70, 79, 0.25) #a5c9f9;
+    -fx-border-width: 1px 1px 1px 4px;
+    -fx-border-radius: 14px;
+}
+
+.req-card-primary {
+    -fx-border-color: rgba(68, 70, 79, 0.25) rgba(68, 70, 79, 0.25) rgba(68, 70, 79, 0.25) #4ade80;
+    -fx-border-width: 1px 1px 1px 4px;
+    -fx-border-radius: 14px;
+}
+
+.req-id {
+    -fx-font-size: 10px;
+    -fx-font-weight: 700;
+    -fx-text-fill: rgba(197, 198, 208, 0.65);
+}
+
+.req-title {
+    -fx-font-family: "Manrope", "Segoe UI", sans-serif;
+    -fx-font-size: 17px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #d9e2ff;
+}
+
+.req-desc {
+    -fx-font-size: 13px;
+    -fx-text-fill: #c5c6d0;
+}
+
+.req-footer {
+    -fx-font-size: 11px;
+    -fx-text-fill: rgba(197, 198, 208, 0.5);
+    -fx-padding: 8px 0 0 0;
+    -fx-border-color: rgba(68, 70, 79, 0.2) transparent transparent transparent;
+    -fx-border-width: 1px 0 0 0;
+}
+
+.badge-pending {
+    -fx-background-color: #2b344b;
+    -fx-background-radius: 6px;
+    -fx-text-fill: #c5c6d0;
+    -fx-font-size: 10px;
+    -fx-font-weight: 800;
+    -fx-padding: 4px 8px;
+}
+
+.badge-transit {
+    -fx-background-color: rgba(165, 201, 249, 0.16);
+    -fx-background-radius: 6px;
+    -fx-text-fill: #a5c9f9;
+    -fx-font-size: 10px;
+    -fx-font-weight: 800;
+    -fx-padding: 4px 8px;
+}
+
+.badge-fulfilled {
+    -fx-background-color: rgba(74, 222, 128, 0.16);
+    -fx-background-radius: 6px;
+    -fx-text-fill: #4ade80;
+    -fx-font-size: 10px;
+    -fx-font-weight: 800;
+    -fx-padding: 4px 8px;
+}

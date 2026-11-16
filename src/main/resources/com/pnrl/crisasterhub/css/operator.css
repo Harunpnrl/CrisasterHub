@@ -1,0 +1,381 @@
+/* ══════════════════════════════════════════════════════════════════════
+   CRISASTER HUB — OPERATOR PANEL STYLESHEET
+   Dark Navy Command Center  •  v2.0
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ROOT & LAYOUT */
+.root-bg {
+    -fx-background-color: radial-gradient(center 100% 0%, radius 100%, #1E2E4F 0%, #081328 100%);
+    -fx-font-family: "Inter", "System";
+}
+
+.edge-to-edge-scroll { -fx-background: transparent; -fx-background-color: transparent; }
+.edge-to-edge-scroll .viewport { -fx-background-color: transparent; }
+
+/* ══════════════════════════════════════════════════════════════════════
+   HEADER
+   ══════════════════════════════════════════════════════════════════════ */
+.header-bar {
+    -fx-background-color: rgba(25, 35, 57, 0.85);
+    -fx-border-color: transparent transparent rgba(255,255,255,0.06) transparent;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.18), 16, 0, 0, 6);
+}
+
+.brand-title {
+    -fx-font-family: "Manrope", "System";
+    -fx-font-weight: 900;
+    -fx-text-fill: #8FB3E2;
+    -fx-font-size: 20px;
+    -fx-letter-spacing: 1;
+}
+
+.btn-logout {
+    -fx-background-color: transparent;
+    -fx-text-fill: #8FB3E2;
+    -fx-font-weight: bold;
+    -fx-font-size: 13px;
+    -fx-border-color: rgba(143, 179, 226, 0.28);
+    -fx-border-radius: 20;
+    -fx-background-radius: 20;
+    -fx-padding: 8 22;
+    -fx-cursor: hand;
+}
+.btn-logout:hover {
+    -fx-background-color: rgba(49, 72, 122, 0.25);
+    -fx-border-color: rgba(143, 179, 226, 0.5);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   TYPOGRAPHY — HEADINGS
+   ══════════════════════════════════════════════════════════════════════ */
+.hero-title {
+    -fx-font-family: "Manrope", "System";
+    -fx-font-weight: 900;
+    -fx-font-size: 48px;
+    -fx-text-fill: #d9e2ff;
+}
+
+.section-title {
+    -fx-font-family: "Manrope", "System";
+    -fx-font-size: 26px;
+    -fx-font-weight: 800;
+    -fx-text-fill: #d9e2ff;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   INVENTORY CARDS
+   ══════════════════════════════════════════════════════════════════════ */
+.inv-card {
+    -fx-background-color: rgba(21, 31, 53, 0.65);
+    -fx-padding: 24;
+    -fx-background-radius: 20;
+    -fx-border-color: rgba(255,255,255,0.06);
+    -fx-border-radius: 20;
+    -fx-spacing: 18;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.22), 18, 0, 0, 4);
+}
+
+/* Icon bases */
+.inv-icon { -fx-font-size: 20px; -fx-padding: 10; -fx-background-radius: 10; }
+
+/* Food & Water / Shelter — blue-purple */
+.inv-icon-primary   { -fx-background-color: rgba(176, 198, 255, 0.18); -fx-text-fill: #b0c6ff; }
+/* Medical — cyan-blue */
+.inv-icon-tertiary  { -fx-background-color: rgba(165, 201, 249, 0.18); -fx-text-fill: #a5c9f9; }
+/* Clothing — lavender */
+.inv-icon-secondary { -fx-background-color: rgba(197, 181, 255, 0.18); -fx-text-fill: #c5b5ff; }
+/* Others — neutral grey */
+.inv-icon-muted     { -fx-background-color: rgba(180, 185, 205, 0.15); -fx-text-fill: #9ea8c0; }
+
+/* Badges */
+.inv-badge-error    { -fx-text-fill: #ffb4ab; -fx-font-size: 11px; -fx-font-weight: bold; -fx-background-color: rgba(255,180,171,0.12); -fx-padding: 3 10; -fx-background-radius: 8; }
+.inv-badge-tertiary { -fx-text-fill: #a5c9f9; -fx-font-size: 11px; -fx-font-weight: bold; -fx-background-color: rgba(165,201,249,0.12); -fx-padding: 3 10; -fx-background-radius: 8; }
+.inv-badge-warning  { -fx-text-fill: #ffd9a0; -fx-font-size: 11px; -fx-font-weight: bold; -fx-background-color: rgba(255,200,100,0.12); -fx-padding: 3 10; -fx-background-radius: 8; }
+.inv-badge-secondary{ -fx-text-fill: #c5b5ff; -fx-font-size: 11px; -fx-font-weight: bold; -fx-background-color: rgba(197,181,255,0.12); -fx-padding: 3 10; -fx-background-radius: 8; }
+.inv-badge-muted    { -fx-text-fill: #9ea8c0; -fx-font-size: 11px; -fx-font-weight: bold; -fx-background-color: rgba(158,168,192,0.12); -fx-padding: 3 10; -fx-background-radius: 8; }
+
+/* Card text */
+.inv-title      { -fx-font-family: "Manrope", "System"; -fx-font-size: 19px; -fx-font-weight: bold; -fx-text-fill: #eef2ff; }
+.inv-stat-label { -fx-font-size: 10px; -fx-font-weight: bold; -fx-text-fill: rgba(197,198,208,0.6); -fx-letter-spacing: 1; }
+.inv-footer     { -fx-font-size: 11px; -fx-text-fill: rgba(197,198,208,0.45); }
+
+/* ══════════════════════════════════════════════════════════════════════
+   PROGRESS BARS
+   ══════════════════════════════════════════════════════════════════════ */
+.progress-bar { -fx-min-height: 8px; -fx-pref-height: 8px; -fx-max-height: 8px; }
+.progress-bar .track { -fx-background-color: rgba(43, 52, 75, 0.8); -fx-background-radius: 10; }
+
+.prog-error     .bar { -fx-background-color: linear-gradient(to right, #ff8a80, #ffb4ab); -fx-background-radius: 10; -fx-padding: 0; }
+.prog-tertiary  .bar { -fx-background-color: linear-gradient(to right, #7ab4f5, #a5c9f9); -fx-background-radius: 10; -fx-padding: 0; }
+.prog-primary   .bar { -fx-background-color: linear-gradient(to right, #8aaeff, #b0c6ff); -fx-background-radius: 10; -fx-padding: 0; }
+.prog-secondary .bar { -fx-background-color: linear-gradient(to right, #a98eff, #c5b5ff); -fx-background-radius: 10; -fx-padding: 0; }
+.prog-muted     .bar { -fx-background-color: linear-gradient(to right, #6d7a96, #9ea8c0); -fx-background-radius: 10; -fx-padding: 0; }
+
+/* ══════════════════════════════════════════════════════════════════════
+   PANELS & TABLE CHROME
+   ══════════════════════════════════════════════════════════════════════ */
+.panel-container {
+    -fx-background-color: rgba(17, 25, 45, 0.70);
+    -fx-background-radius: 20;
+    -fx-border-color: rgba(255,255,255,0.06);
+    -fx-border-radius: 20;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.28), 24, 0, 0, 6);
+}
+
+.panel-header {
+    -fx-background-color: rgba(30, 40, 65, 0.60);
+    -fx-padding: 18 28;
+    -fx-background-radius: 20 20 0 0;
+    -fx-border-color: transparent transparent rgba(255,255,255,0.06) transparent;
+}
+
+.panel-title {
+    -fx-font-family: "Manrope", "System";
+    -fx-font-size: 21px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #eef2ff;
+}
+
+.search-input {
+    -fx-background-color: rgba(4, 13, 35, 0.8);
+    -fx-text-fill: #c5c6d0;
+    -fx-prompt-text-fill: rgba(197,198,208,0.35);
+    -fx-font-size: 13px;
+    -fx-background-radius: 10;
+    -fx-padding: 8 16;
+    -fx-border-color: rgba(255,255,255,0.06);
+    -fx-border-radius: 10;
+    -fx-pref-width: 260;
+}
+.search-input:focused {
+    -fx-border-color: #b0c6ff;
+    -fx-border-radius: 10;
+    -fx-effect: dropshadow(gaussian, rgba(176,198,255,0.15), 8, 0, 0, 0);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   NATIVE JAVAFX TABLEVIEW OVERRIDES
+   ══════════════════════════════════════════════════════════════════════ */
+
+.table-view {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-padding: 0;
+}
+
+
+.table-view:focused {
+    -fx-background-insets: 0;
+}
+
+
+.table-view .column-header-background {
+    -fx-background-color: rgba(30, 40, 65, 0.40);
+    -fx-background-radius: 10 10 0 0;
+    -fx-border-color: transparent transparent rgba(255,255,255,0.06) transparent;
+    -fx-padding: 0;
+}
+
+
+.table-view .column-header, .table-view .filler {
+    -fx-background-color: transparent;
+    -fx-border-width: 0;
+    -fx-size: 45px;
+}
+
+
+.table-view .column-header .label {
+    -fx-text-fill: rgba(197,198,208,0.55);
+    -fx-font-family: "Manrope", "System";
+    -fx-font-weight: bold;
+    -fx-font-size: 11px;
+    -fx-alignment: center-left;
+    -fx-padding: 0 10;
+    -fx-letter-spacing: 1;
+}
+
+.table-view .table-row-cell {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent transparent rgba(255,255,255,0.04) transparent;
+    -fx-border-width: 1;
+    -fx-cell-size: 50px;
+}
+
+.table-view .table-row-cell:odd {
+    -fx-background-color: rgba(255,255,255,0.015);
+}
+
+.table-view .table-row-cell:hover {
+    -fx-background-color: rgba(49, 72, 122, 0.15);
+}
+
+.table-view .table-row-cell:selected {
+    -fx-background-color: rgba(176,198,255, 0.12);
+    -fx-border-color: transparent transparent #b0c6ff transparent;
+}
+
+.table-view .table-cell {
+    -fx-text-fill: #eef2ff;
+    -fx-font-family: "Inter", "System";
+    -fx-font-size: 13px;
+    -fx-alignment: center-left;
+    -fx-padding: 0 10;
+    -fx-border-width: 0;
+}
+
+.table-view .table-row-cell:selected .table-cell {
+    -fx-text-fill: #ffffff;
+}
+
+.table-view .scroll-bar:horizontal,
+.table-view .scroll-bar:vertical {
+    -fx-background-color: transparent;
+}
+
+.table-view .scroll-bar:horizontal .track,
+.table-view .scroll-bar:vertical .track {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-background-radius: 0;
+}
+
+.table-view .scroll-bar:horizontal .thumb,
+.table-view .scroll-bar:vertical .thumb {
+    -fx-background-color: rgba(143, 179, 226, 0.15);
+    -fx-background-radius: 4;
+}
+
+.table-view .scroll-bar:horizontal .thumb:hover,
+.table-view .scroll-bar:vertical .thumb:hover {
+    -fx-background-color: rgba(143, 179, 226, 0.35);
+}
+
+.table-view .scroll-bar .increment-button,
+.table-view .scroll-bar .decrement-button {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+.table-view .scroll-bar .increment-arrow,
+.table-view .scroll-bar .decrement-arrow {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   STATUS & URGENCY BADGES
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── Urgency ────────────────────────────────────────────────────── */
+.badge-critical {
+    -fx-background-color: rgba(255,100,90,0.18);
+    -fx-text-fill: #ffb4ab;
+    -fx-font-size: 11px; -fx-font-weight: bold;
+    -fx-padding: 4 12; -fx-background-radius: 10;
+}
+.badge-urgent {
+    -fx-background-color: rgba(165,201,249,0.18);
+    -fx-text-fill: #a5c9f9;
+    -fx-font-size: 11px; -fx-font-weight: bold;
+    -fx-padding: 4 12; -fx-background-radius: 10;
+}
+.badge-moderate {
+    -fx-background-color: rgba(255,209,128,0.18);
+    -fx-text-fill: #ffd980;
+    -fx-font-size: 11px; -fx-font-weight: bold;
+    -fx-padding: 4 12; -fx-background-radius: 10;
+}
+
+/* ── Request / Assignment Status ────────────────────────────────── */
+.badge-open {
+    -fx-background-color: rgba(176,198,255,0.18);
+    -fx-text-fill: #b0c6ff;
+    -fx-font-size: 11px; -fx-font-weight: bold;
+    -fx-padding: 4 12; -fx-background-radius: 10;
+}
+.badge-pending {
+    -fx-background-color: rgba(255,209,128,0.16);
+    -fx-text-fill: #ffd980;
+    -fx-font-size: 11px; -fx-font-weight: bold;
+    -fx-padding: 4 12; -fx-background-radius: 10;
+}
+.badge-review {
+    -fx-background-color: rgba(197,181,255,0.18);
+    -fx-text-fill: #c5b5ff;
+    -fx-font-size: 11px; -fx-font-weight: bold;
+    -fx-padding: 4 12; -fx-background-radius: 10;
+}
+.badge-active {
+    -fx-background-color: rgba(100,220,150,0.16);
+    -fx-text-fill: #7edba0;
+    -fx-font-size: 11px; -fx-font-weight: bold;
+    -fx-padding: 4 12; -fx-background-radius: 10;
+}
+.badge-completed {
+    -fx-background-color: rgba(158,168,192,0.16);
+    -fx-text-fill: #9ea8c0;
+    -fx-font-size: 11px; -fx-font-weight: bold;
+    -fx-padding: 4 12; -fx-background-radius: 10;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   TABLE ACTION BUTTONS
+   ══════════════════════════════════════════════════════════════════════ */
+.btn-table-primary {
+    -fx-background-color: #2d4878;
+    -fx-text-fill: #c8d9ff;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-background-radius: 8;
+    -fx-padding: 6 16;
+    -fx-cursor: hand;
+    -fx-border-color: rgba(176,198,255,0.15);
+    -fx-border-radius: 8;
+}
+.btn-table-primary:hover {
+    -fx-background-color: #3a5a96;
+    -fx-text-fill: #eef2ff;
+}
+
+.btn-table-secondary {
+    -fx-background-color: rgba(43,52,75,0.55);
+    -fx-text-fill: rgba(197,198,208,0.85);
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-background-radius: 8;
+    -fx-padding: 6 16;
+    -fx-cursor: hand;
+    -fx-border-color: rgba(255,255,255,0.07);
+    -fx-border-radius: 8;
+}
+.btn-table-secondary:hover {
+    -fx-background-color: rgba(49,72,122,0.35);
+    -fx-text-fill: #eef2ff;
+}
+
+.btn-table-danger {
+    -fx-background-color: rgba(255,100,90,0.14);
+    -fx-text-fill: #ffb4ab;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-background-radius: 8;
+    -fx-padding: 6 16;
+    -fx-cursor: hand;
+    -fx-border-color: rgba(255,180,171,0.15);
+    -fx-border-radius: 8;
+}
+.btn-table-danger:hover {
+    -fx-background-color: rgba(255,100,90,0.26);
+    -fx-text-fill: #ffd0cb;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   MISC UTILS
+   ══════════════════════════════════════════════════════════════════════ */
+.link-accent {
+    -fx-text-fill: #b0c6ff;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-underline: false;
+}
+.link-accent:hover { -fx-text-fill: #d9e2ff; }
