@@ -29,13 +29,11 @@
         </Circle>
     </StackPane>
 
-    <!-- Ana İçerik Konteyneri -->
     <VBox alignment="CENTER" maxWidth="540.0" spacing="28.0">
         <padding>
             <Insets bottom="24.0" left="20.0" right="20.0" top="24.0" />
         </padding>
 
-        <!-- Başlık ve Alt Başlık -->
         <VBox alignment="CENTER" spacing="6.0">
             <HBox alignment="CENTER">
                 <Label styleClass="brand-title-main" text="Crisaster" />
@@ -44,10 +42,8 @@
             <Label styleClass="brand-subtitle" text="Disaster Coordination &amp; Crisis Management System." />
         </VBox>
 
-        <!-- Glassmorphism Ana Kart -->
         <VBox styleClass="glass-panel">
 
-            <!-- Üst Sekme Çubuğu (Sign In / Register) -->
             <HBox spacing="8.0" styleClass="tab-header-bar">
                 <padding>
                     <Insets bottom="8.0" left="8.0" right="8.0" top="8.0" />
@@ -67,16 +63,16 @@
                 </ToggleButton>
             </HBox>
 
-            <!-- Form İçerik Alanı -->
+            <!-- Form -->
             <StackPane>
                 <padding>
                     <Insets bottom="36.0" left="36.0" right="36.0" top="32.0" />
                 </padding>
 
-                <!-- 1. SIGN IN PANE -->
+                <!-- SIGN IN PANE -->
                 <VBox fx:id="signinPane" spacing="22.0">
 
-                    <!-- Access Level (Rol Seçimi) -->
+                    <!-- Access Level -->
                     <VBox spacing="10.0">
                         <Label styleClass="field-label" text="ACCESS LEVEL" />
                         <HBox spacing="8.0" styleClass="role-container">
@@ -98,7 +94,7 @@
                         <TextField fx:id="loginEmailField" promptText="name@crisasterhub.com" styleClass="underline-input" />
                     </VBox>
 
-                    <!-- Password + Göz İkonu -->
+                    <!-- Password -->
                     <VBox spacing="6.0">
                         <Label styleClass="field-label" text="PASSWORD" />
                         <StackPane alignment="CENTER_RIGHT">
@@ -115,10 +111,10 @@
                         </StackPane>
                     </VBox>
 
-                    <!-- Hata / Durum Mesajı -->
+                    <!-- Error Label -->
                     <Label fx:id="loginErrorLabel" managed="false" styleClass="error-label" visible="false" />
 
-                    <!-- Log In Butonu -->
+                    <!-- Log In Button -->
                     <Button fx:id="loginSubmitBtn" defaultButton="true" maxWidth="Infinity" onAction="#handleLoginSubmit" styleClass="primary-gradient-cta" text="Log In">
                         <graphic>
                             <SVGPath content="M11 7L9.6 8.4l2.6 2.6H2v2h10.2l-2.6 2.6L11 17l5-5-5-5zm9 12h-8v2h8c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-8v2h8v14z" scaleX="0.8" scaleY="0.8" styleClass="cta-icon" />
@@ -131,14 +127,14 @@
 
                 <!-- 2. REGISTER PANE -->
                 <VBox fx:id="registerPane" managed="false" spacing="18.0" visible="false">
-                    <Label styleClass="form-helper-text" text="Please enter your details to create your CrisasterHub account" />
+                    <Label styleClass="form-helper-text"     text="Please enter your details to create your CrisasterHub account" />
 
-                    <!-- Full Name & Username Yan Yana -->
+                    <!-- Full Name & Username -->
                     <HBox spacing="14.0">
                         <VBox spacing="6.0" HBox.hgrow="ALWAYS">
                             <Label styleClass="field-label" text="FULL NAME" />
                             <StackPane alignment="CENTER_RIGHT">
-                                <TextField fx:id="regNameField" promptText="Harun Behlül Pınarlı" styleClass="underline-input" />
+                                <TextField fx:id="regNameField" promptText="name surname" styleClass="underline-input" />
                                 <SVGPath fx:id="nameCheckIcon" content="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" scaleX="0.75" scaleY="0.75" styleClass="check-icon" visible="false">
                                     <StackPane.margin><Insets right="8.0" /></StackPane.margin>
                                 </SVGPath>
@@ -148,7 +144,7 @@
                         <VBox spacing="6.0" HBox.hgrow="ALWAYS">
                             <Label styleClass="field-label" text="USERNAME" />
                             <StackPane alignment="CENTER_RIGHT">
-                                <TextField fx:id="regUsernameField" promptText="hpinarli" styleClass="underline-input" />
+                                <TextField fx:id="regUsernameField" promptText="username" styleClass="underline-input" />
                                 <SVGPath fx:id="userCheckIcon" content="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" scaleX="0.75" scaleY="0.75" styleClass="check-icon" visible="false">
                                     <StackPane.margin><Insets right="8.0" /></StackPane.margin>
                                 </SVGPath>
@@ -167,7 +163,7 @@
                         </StackPane>
                     </VBox>
 
-                    <!-- Password & Confirm Password Yan Yana -->
+                    <!-- Password & Confirm Password -->
                     <HBox spacing="14.0">
                         <VBox spacing="6.0" HBox.hgrow="ALWAYS">
                             <Label styleClass="field-label" text="PASSWORD" />
@@ -192,7 +188,7 @@
 
                     <Label fx:id="registerErrorLabel" managed="false" styleClass="error-label" visible="false" />
 
-                    <!-- Complete Registration Butonu -->
+                    <!-- Complete Registration Button -->
                     <Button fx:id="registerSubmitBtn" maxWidth="Infinity" onAction="#handleRegisterSubmit" styleClass="primary-gradient-cta" text="Complete Registration">
                         <graphic>
                             <SVGPath content="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z" scaleX="0.8" scaleY="0.8" styleClass="cta-icon" />

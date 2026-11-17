@@ -9,7 +9,6 @@
 
 .main-scroll {
     -fx-background-color: transparent;
-    -fx-background: transparent;
     -fx-border-color: transparent;
 }
 
@@ -384,4 +383,19 @@
 .empty-state-sub {
     -fx-font-size: 13px;
     -fx-text-fill: #c5c6d0;
+}
+
+.map-container-frame {
+    -fx-background-color: #081328;
+    -fx-background-radius: 12px;
+    -fx-border-color: rgba(165, 201, 249, 0.35);
+    -fx-border-radius: 12px;
+    -fx-border-width: 1.5px;
+    -fx-padding: 2px;
+}
+
+.map-status-text {
+    -fx-font-size: 10px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #a5c9f9;
 }

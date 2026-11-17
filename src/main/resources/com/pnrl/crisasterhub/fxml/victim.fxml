@@ -17,7 +17,7 @@
 <?import javafx.scene.web.WebView?>
 
 <BorderPane prefHeight="860.0" prefWidth="1280.0" styleClass="root-canvas" stylesheets="@../css/victim.css"
-            xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+             xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1"
             fx:controller="com.pnrl.crisasterhub.VictimController">
     <!-- TOP APP BAR -->
     <top>
@@ -25,23 +25,25 @@
             <padding>
                 <Insets bottom="16.0" left="36.0" right="36.0" top="16.0"/>
             </padding>
-            <!-- Sol: Marka Logosu -->
+
             <HBox alignment="CENTER_LEFT" spacing="12.0" StackPane.alignment="CENTER_LEFT">
                 <StackPane styleClass="brand-icon-box">
                     <SVGPath
                             content="M19 13h-4.17l2.95-2.95-1.41-1.41L13.41 11.6V7h-2v4.59L8.46 8.64 7.05 10.05 10 13H5v2h5l-2.95 2.95 1.41 1.41 2.95-2.95V21h2v-4.59l2.95 2.95 1.41-1.41L14.83 15H19v-2z"
                             scaleX="0.85" scaleY="0.85" styleClass="brand-icon-svg"/>
                 </StackPane>
+
                 <HBox alignment="CENTER_LEFT">
                     <Label styleClass="brand-title-main" text="Crisaster"/>
                     <Label styleClass="brand-title-accent" text="HUB"/>
                 </HBox>
+
             </HBox>
-            <!-- Orta: Panel Başlığı -->
             <VBox alignment="CENTER" mouseTransparent="true" StackPane.alignment="CENTER">
                 <Label styleClass="panel-header-badge" text="VICTIM PANEL"/>
             </VBox>
-            <!-- Sağ: Log Out Butonu -->
+
+            <!-- Log Out Button -->
             <HBox alignment="CENTER_RIGHT" StackPane.alignment="CENTER_RIGHT">
                 <Button fx:id="logoutBtn" onAction="#handleLogout" styleClass="logout-btn" text="Log Out">
                     <graphic>
@@ -53,14 +55,15 @@
             </HBox>
         </StackPane>
     </top>
-    <!-- ANA İÇERİK ALANI -->
+
+    <!-- MAIN CONTENT -->
     <center>
         <ScrollPane fitToWidth="true" styleClass="main-scroll">
             <HBox alignment="TOP_CENTER" spacing="32.0">
                 <padding>
                     <Insets bottom="36.0" left="44.0" right="44.0" top="32.0"/>
                 </padding>
-                <!-- SOL SÜTUN: REQUEST ASSISTANCE + INTERACTIVE MAP -->
+                <!-- REQUEST ASSISTANCE + INTERACTIVE MAP -->
                 <VBox maxWidth="720.0" spacing="24.0" HBox.hgrow="ALWAYS">
                     <!-- Başlık Bloğu -->
                     <VBox spacing="8.0">
@@ -89,12 +92,12 @@
                                     <fx:define>
                                         <ToggleGroup fx:id="urgencyGroup"/>
                                     </fx:define>
-                                    <ToggleButton fx:id="urgencyLowBtn" maxWidth="Infinity" styleClass="urgency-chip"
+                                    <ToggleButton fx:id="urgencyLowBtn" maxWidth="Infinity" selected="true"
+                                                  styleClass="urgency-chip"
                                                   text="Low" toggleGroup="$urgencyGroup" HBox.hgrow="ALWAYS"/>
                                     <ToggleButton fx:id="urgencyMediumBtn" maxWidth="Infinity" styleClass="urgency-chip"
                                                   text="Medium" toggleGroup="$urgencyGroup" HBox.hgrow="ALWAYS"/>
-                                    <ToggleButton fx:id="urgencyHighBtn" maxWidth="Infinity" selected="true"
-                                                  styleClass="urgency-chip-high" text="High" toggleGroup="$urgencyGroup"
+                                    <ToggleButton fx:id="urgencyHighBtn" maxWidth="Infinity" styleClass="urgency-chip" text="High" toggleGroup="$urgencyGroup"
                                                   HBox.hgrow="ALWAYS"/>
                                 </HBox>
                             </VBox>
@@ -122,7 +125,7 @@
                             </StackPane>
                         </VBox>
                         <!-- Submit Butonu -->
-                        <Button fx:id="submitRequestBtn" maxWidth="Infinity" onAction="#handleSubmitRequest"
+                        <Button fx:id="submitRequestBtn" disable="true" maxWidth="Infinity" onAction="#handleSubmitRequest"
                                 styleClass="primary-gradient-cta" text="Submit Emergency Request"/>
                     </VBox>
                 </VBox>

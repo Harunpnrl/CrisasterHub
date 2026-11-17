@@ -3,6 +3,7 @@ module com.pnrl.crisasterhub {
     requires javafx.fxml;
     requires javafx.web;
     requires java.sql;
+    requires com.google.gson;
 
     requires jdk.jsobject;
 

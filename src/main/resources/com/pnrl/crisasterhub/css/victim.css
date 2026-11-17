@@ -1,7 +1,3 @@
-/* ==========================================================================
-   CrisasterHUB - Victim Panel Stylesheet
-   ========================================================================== */
-
 .root-canvas {
     -fx-background-color: radial-gradient(focus-angle 45deg, focus-distance 20%, center 85% 15%, radius 90%, #1e2e4f 0%, #081328 100%);
     -fx-font-family: "Inter", "Segoe UI", sans-serif;
@@ -9,7 +5,6 @@
 
 .main-scroll {
     -fx-background-color: transparent;
-    -fx-background: transparent;
     -fx-border-color: transparent;
 }
 
@@ -17,7 +12,6 @@
     -fx-background-color: transparent;
 }
 
-/* Top Navigation Bar */
 .top-navbar {
     -fx-background-color: rgba(25, 35, 57, 0.88);
     -fx-border-color: transparent transparent rgba(49, 72, 122, 0.35) transparent;
@@ -88,7 +82,6 @@
     -fx-fill: #ffffff;
 }
 
-/* Başlıklar */
 .page-title {
     -fx-font-family: "Manrope", "Segoe UI", sans-serif;
     -fx-font-size: 38px;
@@ -113,7 +106,6 @@
     -fx-background-radius: 99px;
 }
 
-/* Glassmorphism Form Paneli */
 .glass-panel {
     -fx-background-color: rgba(25, 35, 57, 0.65);
     -fx-background-radius: 16px;
@@ -129,7 +121,6 @@
     -fx-text-fill: #a5c9f9;
 }
 
-/* ComboBox (Category) */
 .dark-combo {
     -fx-background-color: rgba(43, 52, 75, 0.55);
     -fx-background-radius: 8px 8px 0 0;
@@ -170,8 +161,7 @@
     -fx-text-fill: #ffffff;
 }
 
-/* Urgency Level Butonları */
-.urgency-chip, .urgency-chip-high {
+.urgency-chip {
     -fx-background-color: #202a40;
     -fx-background-radius: 8px;
     -fx-border-color: rgba(68, 70, 79, 0.25);
@@ -183,25 +173,12 @@
     -fx-cursor: hand;
 }
 
-.urgency-chip:hover, .urgency-chip-high:hover {
-    -fx-background-color: rgba(176, 198, 255, 0.18);
-}
-
 .urgency-chip:selected {
     -fx-background-color: #31487a;
     -fx-text-fill: #d9e2ff;
     -fx-border-color: #b0c6ff;
 }
 
-.urgency-chip-high:selected {
-    -fx-background-color: rgba(165, 201, 249, 0.2);
-    -fx-text-fill: #a5c9f9;
-    -fx-border-color: rgba(165, 201, 249, 0.55);
-    -fx-border-width: 1.5px;
-    -fx-effect: dropshadow(gaussian, rgba(165, 201, 249, 0.25), 14, 0.2, 0, 0);
-}
-
-/* TextArea (Description) */
 .dark-textarea {
     -fx-background-color: rgba(43, 52, 75, 0.55);
     -fx-background-radius: 8px 8px 0 0;
@@ -221,7 +198,6 @@
     -fx-border-color: transparent transparent #b0c6ff transparent;
 }
 
-/* Harita Alanı */
 .map-container-frame {
     -fx-background-color: #081328;
     -fx-background-radius: 12px;
@@ -250,7 +226,6 @@
     -fx-text-fill: #a5c9f9;
 }
 
-/* Primary CTA Button */
 .primary-gradient-cta {
     -fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #31487a 0%, #1e2e4f 100%);
     -fx-background-radius: 12px;
@@ -272,7 +247,6 @@
     -fx-scale-y: 0.98;
 }
 
-/* Sağ Sütun - Dinamik Talep Kartları (renderRequests Sınıfları) */
 .req-card {
     -fx-background-color: rgba(25, 35, 57, 0.65);
     -fx-background-radius: 14px;
@@ -326,6 +300,23 @@
     -fx-padding: 8px 0 0 0;
     -fx-border-color: rgba(68, 70, 79, 0.2) transparent transparent transparent;
     -fx-border-width: 1px 0 0 0;
+}
+
+.cancel-request-btn {
+    -fx-background-color: transparent;
+    -fx-border-color: rgba(255, 180, 171, 0.16);
+    -fx-border-radius: 7px;
+    -fx-background-radius: 7px;
+    -fx-text-fill: #ffb4ab;
+    -fx-font-size: 11px;
+    -fx-font-weight: 700;
+    -fx-padding: 7px 12px;
+    -fx-cursor: hand;
+}
+
+.cancel-request-btn:hover {
+    -fx-background-color: rgba(255, 180, 171, 0.16);
+    -fx-border-color: #ffb4ab;
 }
 
 .badge-pending {

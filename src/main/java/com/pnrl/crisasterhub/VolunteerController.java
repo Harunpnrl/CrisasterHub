@@ -1,5 +1,8 @@
 package com.pnrl.crisasterhub;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.pnrl.crisasterhub.dbclasses.Aid_Request;
 import com.pnrl.crisasterhub.dbclasses.Resource;
 import javafx.beans.property.SimpleObjectProperty;
@@ -7,6 +10,8 @@ import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
+import javafx.application.Platform;
+import javafx.concurrent.Worker;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
@@ -17,6 +22,8 @@ import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.stage.Stage;
+import javafx.scene.web.WebEngine;
+import javafx.scene.web.WebView;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -24,13 +31,30 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Optional;
+import java.util.Locale;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class VolunteerController {
+
+    private static final Logger LOGGER = Logger.getLogger(VolunteerController.class.getName());
+    private static final double DEFAULT_VOLUNTEER_RADIUS_KM = 50.0;
+    private static final double VOLUNTEER_RADIUS_KM = configuredRadiusKm();
+    private static final ExecutorService BACKGROUND_EXECUTOR = Executors.newCachedThreadPool(r -> {
+        Thread thread = new Thread(r, "volunteer-background-task");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     // Sol Form Bileşenleri
     @FXML private ComboBox<String> resourceCategoryCombo;
     @FXML private TextField resourceQuantityField;
     @FXML private TextArea resourceDescriptionArea;
+    @FXML private WebView volunteerMapWebView;
+    @FXML private Label volunteerMapStatusLabel;
 
     // My Active Tasks
     @FXML private Label activeTaskCountBadge;
@@ -50,6 +74,13 @@ public class VolunteerController {
     @FXML private VBox emptyResourcesState;
 
     private int currentUserId;
+    private double selectedLatitude;
+    private double selectedLongitude;
+    private String selectedCity = "";
+    private String selectedDistrict = "";
+    private volatile boolean locationLookupInProgress;
+    private long locationRequestVersion;
+    private final MapBridge mapBridge = new MapBridge();
     private final ObservableList<Aid_Request> allAvailableTasks = FXCollections.observableArrayList();
     private FilteredList<Aid_Request> filteredAvailableTasks;
 
@@ -67,12 +98,26 @@ public class VolunteerController {
         }
     }
 
+    private record ActiveTask(int assignmentId, int requestId, String category, String description,
+                              String status, int quantity, String city, String district) {}
+
     @FXML
     public void initialize() {
         ObservableList<String> categories = FXCollections.observableArrayList(
                 "Food", "Water", "Medicine", "Shelter", "Clothing", "Other"
         );
         resourceCategoryCombo.setItems(categories);
+
+        WebEngine webEngine = volunteerMapWebView.getEngine();
+        webEngine.getLoadWorker().stateProperty().addListener((observable, oldValue, newValue) -> {
+            if (newValue == Worker.State.SUCCEEDED) {
+                javafx.scene.web.WebEngine engine = volunteerMapWebView.getEngine();
+                netscape.javascript.JSObject window =
+                        (netscape.javascript.JSObject) engine.executeScript("window");
+                window.setMember("javaConnector", mapBridge);
+            }
+        });
+        webEngine.loadContent(createMapHtml());
 
         // Sadece rakam girişine izin ver
         resourceQuantityField.textProperty().addListener((observable, oldValue, newValue) -> {
@@ -95,13 +140,16 @@ public class VolunteerController {
                 String filter = (newVal == null) ? "" : newVal.trim().toLowerCase();
                 filteredAvailableTasks.setPredicate(task -> {
                     if (filter.isEmpty()) return true;
-                    return task.getDescription() != null && task.getDescription().toLowerCase().contains(filter);
+                    return String.valueOf(task.getRequestId()).contains(filter)
+                            || safeText(task.getCategory()).toLowerCase(Locale.ROOT).contains(filter)
+                            || safeText(task.getUrgency()).toLowerCase(Locale.ROOT).contains(filter)
+                            || safeText(task.getDescription()).toLowerCase(Locale.ROOT).contains(filter);
                 });
                 renderAvailableTaskCards();
             });
         }
 
-        System.out.println("Volunteer Portal initialized.");
+        LOGGER.info("Volunteer portal initialized.");
     }
 
     public void setCurrentUserId(int userId) {
@@ -117,6 +165,10 @@ public class VolunteerController {
 
     @FXML
     private void handleRegisterResource(ActionEvent event) {
+        if (currentUserId <= 0) {
+            showAlert(Alert.AlertType.ERROR, "Session Error", "Your user session is invalid. Please log in again.");
+            return;
+        }
         String categoryUi = resourceCategoryCombo.getValue();
         String quantityStr = resourceQuantityField.getText();
         String description = resourceDescriptionArea.getText();
@@ -126,73 +178,136 @@ public class VolunteerController {
             return;
         }
 
-        int quantity = Integer.parseInt(quantityStr);
+        if (locationLookupInProgress) {
+            showAlert(Alert.AlertType.INFORMATION, "Location Loading", "Please wait while your location is being determined.");
+            return;
+        }
+        if (selectedLatitude == 0.0 && selectedLongitude == 0.0) {
+            showAlert(Alert.AlertType.WARNING, "Missing Location", "Please click your current location on the map.");
+            return;
+        }
+
+        int quantity;
+        try {
+            quantity = Integer.parseInt(quantityStr);
+        } catch (NumberFormatException e) {
+            showAlert(Alert.AlertType.WARNING, "Invalid Quantity", "Please enter a valid quantity.");
+            return;
+        }
         if (quantity <= 0) {
             showAlert(Alert.AlertType.WARNING, "Invalid Quantity", "Quantity must be greater than 0.");
             return;
         }
 
-        String dbCategory = categoryUi.toLowerCase();
-        String insertQuery = "INSERT INTO RESOURCE (user_id, location_id, category, quantity, description) VALUES (?, ?, ?, ?, ?)";
+        String dbCategory = categoryUi.toLowerCase(Locale.ROOT);
+        final int userId = currentUserId;
+        final double latitude = selectedLatitude;
+        final double longitude = selectedLongitude;
+        final String city = selectedCity;
+        final String district = selectedDistrict;
+        final String resourceDescription = description.trim();
+        CompletableFuture.runAsync(() -> registerResource(userId, latitude, longitude, city, district,
+                        dbCategory, quantity, resourceDescription), BACKGROUND_EXECUTOR)
+                .thenRun(() -> Platform.runLater(() -> {
+                    showAlert(Alert.AlertType.INFORMATION, "Success", "Resource successfully registered into the network.");
+                    resourceCategoryCombo.setValue(null);
+                    resourceQuantityField.clear();
+                    resourceDescriptionArea.clear();
+                    selectedLatitude = 0.0;
+                    selectedLongitude = 0.0;
+                    selectedCity = "";
+                    selectedDistrict = "";
+                    volunteerMapStatusLabel.setText("CLICK MAP TO SET LOCATION");
+                    loadMyResources();
+                    loadAvailableTasks();
+                }))
+                .exceptionally(error -> {
+                    LOGGER.log(Level.WARNING, "Could not register resource", error);
+                    Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "Database Error",
+                            "Failed to save the resource. Please try again."));
+                    return null;
+                });
+    }
 
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement(insertQuery)) {
+    private void registerResource(int userId, double latitude, double longitude, String city,
+                                  String district, String category, int quantity, String description) {
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            conn.setAutoCommit(false);
+            try {
+                int locationId;
+                try (PreparedStatement location = conn.prepareStatement(
+                        "INSERT INTO LOCATION (city, district, latitude, longitude) VALUES (?, ?, ?, ?)",
+                        java.sql.Statement.RETURN_GENERATED_KEYS)) {
+                    location.setString(1, city);
+                    location.setString(2, district);
+                    location.setDouble(3, latitude);
+                    location.setDouble(4, longitude);
+                    location.executeUpdate();
+                    try (ResultSet keys = location.getGeneratedKeys()) {
+                        if (!keys.next()) throw new SQLException("Location ID was not generated");
+                        locationId = keys.getInt(1);
+                    }
+                }
 
-            ps.setInt(1, currentUserId);
-            ps.setInt(2, 1);
-            ps.setString(3, dbCategory);
-            ps.setInt(4, quantity);
-            ps.setString(5, description.trim());
-
-            if (ps.executeUpdate() > 0) {
-                showAlert(Alert.AlertType.INFORMATION, "Success", "Resource successfully registered into the network.");
-                resourceCategoryCombo.setValue(null);
-                resourceQuantityField.clear();
-                resourceDescriptionArea.clear();
-
-                loadMyResources();
-                loadAvailableTasks();
+                try (PreparedStatement resource = conn.prepareStatement(
+                        "INSERT INTO RESOURCE (user_id, location_id, category, quantity, description) VALUES (?, ?, ?, ?, ?)")) {
+                    resource.setInt(1, userId);
+                    resource.setInt(2, locationId);
+                    resource.setString(3, category);
+                    resource.setInt(4, quantity);
+                    resource.setString(5, description);
+                    resource.executeUpdate();
+                }
+                conn.commit();
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            } finally {
+                conn.setAutoCommit(true);
             }
-
         } catch (SQLException e) {
-            e.printStackTrace();
-            showAlert(Alert.AlertType.ERROR, "Database Error", "Failed to save the resource. Please try again.");
+            throw new RuntimeException(e);
         }
     }
 
     private void loadMyResources() {
-        ObservableList<ResourceItem> resourceList = FXCollections.observableArrayList();
-        String query = "SELECT resource_id, category, quantity, description FROM RESOURCE WHERE user_id = ? AND quantity > 0 ORDER BY created_at DESC";
+        if (currentUserId <= 0) return;
+        final int userId = currentUserId;
+        CompletableFuture.supplyAsync(() -> fetchResources(userId), BACKGROUND_EXECUTOR)
+                .thenAccept(resources -> Platform.runLater(() -> {
+                    resourcesTable.setItems(FXCollections.observableArrayList(resources));
+                    int count = resources.size();
+                    resourceCountBadge.setText(count + " LISTED");
+                    boolean empty = count == 0;
+                    emptyResourcesState.setVisible(empty);
+                    emptyResourcesState.setManaged(empty);
+                }))
+                .exceptionally(error -> {
+                    LOGGER.log(Level.WARNING, "Failed to load resources for user " + userId, error);
+                    return null;
+                });
+    }
 
+    private java.util.List<ResourceItem> fetchResources(int userId) {
+        java.util.List<ResourceItem> resources = new java.util.ArrayList<>();
+        String query = "SELECT resource_id, category, quantity, description FROM RESOURCE " +
+                "WHERE user_id = ? AND quantity > 0 ORDER BY created_at DESC";
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(query)) {
-
-            ps.setInt(1, currentUserId);
-            ResultSet rs = ps.executeQuery();
-
-            while (rs.next()) {
-                String rawCategory = rs.getString("category");
-                String displayCategory = rawCategory.substring(0, 1).toUpperCase() + rawCategory.substring(1);
-
-                resourceList.add(new ResourceItem(
-                        rs.getInt("resource_id"),
-                        displayCategory,
-                        rs.getInt("quantity"),
-                        rs.getString("description")
-                ));
+            ps.setInt(1, userId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String rawCategory = rs.getString("category");
+                    String displayCategory = rawCategory == null || rawCategory.isBlank()
+                            ? "Unknown"
+                            : rawCategory.substring(0, 1).toUpperCase(Locale.ROOT) + rawCategory.substring(1);
+                    resources.add(new ResourceItem(rs.getInt("resource_id"), displayCategory,
+                            rs.getInt("quantity"), rs.getString("description")));
+                }
             }
-
-            resourcesTable.setItems(resourceList);
-
-            int count = resourceList.size();
-            resourceCountBadge.setText(count + " LISTED");
-            boolean isEmpty = count == 0;
-            emptyResourcesState.setVisible(isEmpty);
-            emptyResourcesState.setManaged(isEmpty);
-
+            return resources;
         } catch (SQLException e) {
-            e.printStackTrace();
-            System.out.println("Failed to load resources for user: " + currentUserId);
+            throw new RuntimeException(e);
         }
     }
 
@@ -227,31 +342,46 @@ public class VolunteerController {
     }
 
     private void handleEditResource(ResourceItem item) {
-        TextInputDialog dialog = new TextInputDialog(String.valueOf(item.getQuantity()));
+        Dialog<ButtonType> dialog = new Dialog<>();
         dialog.setTitle("Edit Resource Quantity");
-        dialog.setHeaderText("Update quantity for " + item.getCategory());
-        dialog.setContentText("New Quantity:");
+        dialog.setHeaderText("Update " + item.getCategory() + " resource");
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
 
-        Optional<String> result = dialog.showAndWait();
-        result.ifPresent(qtyStr -> {
-            if (!qtyStr.matches("\\d+")) {
-                showAlert(Alert.AlertType.WARNING, "Invalid Input", "Please enter a valid number.");
+        TextField quantityField = new TextField(String.valueOf(item.getQuantity()));
+        TextArea descriptionField = new TextArea(safeText(item.getDescription()));
+        descriptionField.setWrapText(true);
+        descriptionField.setPrefRowCount(3);
+        VBox content = new VBox(10,
+                new Label("Quantity:"), quantityField,
+                new Label("Description:"), descriptionField);
+        content.setPrefWidth(360);
+        dialog.getDialogPane().setContent(content);
+
+        dialog.showAndWait().ifPresent(result -> {
+            if (result != ButtonType.OK) return;
+            int newQty;
+            try {
+                newQty = Integer.parseInt(quantityField.getText().trim());
+            } catch (NumberFormatException e) {
+                showAlert(Alert.AlertType.WARNING, "Invalid Input", "Please enter a valid quantity.");
                 return;
             }
-            int newQty = Integer.parseInt(qtyStr);
-            String sql = "UPDATE RESOURCE SET quantity = ? WHERE resource_id = ?";
-            try (Connection conn = DatabaseConnection.getConnection();
-                 PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setInt(1, newQty);
-                ps.setInt(2, item.getResourceId());
-                ps.executeUpdate();
-
-                loadMyResources();
-                loadAvailableTasks();
-            } catch (SQLException e) {
-                e.printStackTrace();
-                showAlert(Alert.AlertType.ERROR, "Database Error", "Could not update resource quantity.");
+            String newDescription = descriptionField.getText() == null ? "" : descriptionField.getText().trim();
+            if (newQty < 0 || newDescription.isEmpty()) {
+                showAlert(Alert.AlertType.WARNING, "Invalid Input", "Quantity and description are required.");
+                return;
             }
+            CompletableFuture.runAsync(() -> updateResource(item.getResourceId(), newQty, newDescription), BACKGROUND_EXECUTOR)
+                    .thenRun(() -> Platform.runLater(() -> {
+                        loadMyResources();
+                        loadAvailableTasks();
+                    }))
+                    .exceptionally(error -> {
+                        LOGGER.log(Level.WARNING, "Could not update resource quantity", error);
+                        Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "Database Error",
+                                "Could not update resource."));
+                        return null;
+                    });
         });
     }
 
@@ -263,18 +393,60 @@ public class VolunteerController {
 
         Optional<ButtonType> choice = confirm.showAndWait();
         if (choice.isPresent() && choice.get() == ButtonType.OK) {
-            String sql = "DELETE FROM RESOURCE WHERE resource_id = ?";
-            try (Connection conn = DatabaseConnection.getConnection();
-                 PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setInt(1, item.getResourceId());
-                ps.executeUpdate();
+            CompletableFuture.runAsync(() -> deleteResource(item.getResourceId()), BACKGROUND_EXECUTOR)
+                    .thenRun(() -> Platform.runLater(() -> {
+                        loadMyResources();
+                        loadAvailableTasks();
+                    }))
+                    .exceptionally(error -> {
+                        LOGGER.log(Level.WARNING, "Could not delete resource", error);
+                        Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "Database Error",
+                                "Could not delete resource because it is linked to an assignment."));
+                        return null;
+                    });
+        }
+    }
 
-                loadMyResources();
-                loadAvailableTasks();
-            } catch (SQLException e) {
-                e.printStackTrace();
-                showAlert(Alert.AlertType.ERROR, "Database Error", "Could not delete resource (it may be linked to an active assignment).");
+    private void updateResource(int resourceId, int newQuantity, String description) {
+        String reservedQuery = "SELECT COALESCE(SUM(assigned_quantity), 0) FROM ASSIGNMENT " +
+                "WHERE resource_id = ? AND LOWER(status) IN ('assigned', 'on the way')";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement reserved = conn.prepareStatement(reservedQuery)) {
+            reserved.setInt(1, resourceId);
+            try (ResultSet rs = reserved.executeQuery()) {
+                if (rs.next() && newQuantity < rs.getInt(1)) {
+                    throw new SQLException("Quantity cannot be lower than reserved assignment quantity");
+                }
             }
+            try (PreparedStatement update = conn.prepareStatement(
+                    "UPDATE RESOURCE SET quantity = ?, description = ? WHERE resource_id = ? AND user_id = ?")) {
+                update.setInt(1, newQuantity);
+                update.setString(2, description);
+                update.setInt(3, resourceId);
+                update.setInt(4, currentUserId);
+                if (update.executeUpdate() != 1) throw new SQLException("Resource not found");
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private void deleteResource(int resourceId) {
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement check = conn.prepareStatement(
+                     "SELECT COUNT(*) FROM ASSIGNMENT WHERE resource_id = ?")) {
+            check.setInt(1, resourceId);
+            try (ResultSet rs = check.executeQuery()) {
+                if (rs.next() && rs.getInt(1) > 0) throw new SQLException("Resource has active assignment");
+            }
+            try (PreparedStatement delete = conn.prepareStatement(
+                    "DELETE FROM RESOURCE WHERE resource_id = ? AND user_id = ?")) {
+                delete.setInt(1, resourceId);
+                delete.setInt(2, currentUserId);
+                if (delete.executeUpdate() != 1) throw new SQLException("Resource not found");
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
         }
     }
 
@@ -283,36 +455,57 @@ public class VolunteerController {
     // =========================================================================
 
     private void loadAvailableTasks() {
-        allAvailableTasks.clear();
+        if (currentUserId <= 0) return;
+        final int userId = currentUserId;
+        CompletableFuture.supplyAsync(() -> fetchAvailableTasks(userId), BACKGROUND_EXECUTOR)
+                .thenAccept(tasks -> Platform.runLater(() -> {
+                    allAvailableTasks.setAll(tasks);
+                    renderAvailableTaskCards();
+                }))
+                .exceptionally(error -> {
+                    LOGGER.log(Level.WARNING, "Failed to load available tasks", error);
+                    return null;
+                });
+    }
 
-        String query = "SELECT request_id, category, description, urgency " +
-                "FROM AID_REQUEST " +
-                "WHERE status = 'Pending' " +
-                "AND LOWER(category) IN (" +
-                "    SELECT LOWER(category) FROM RESOURCE WHERE user_id = ? AND quantity > 0" +
-                ") " +
-                "ORDER BY FIELD(urgency, 'HIGH', 'MEDIUM', 'LOW'), created_at ASC";
-
+    private java.util.List<Aid_Request> fetchAvailableTasks(int userId) {
+        java.util.List<Aid_Request> tasks = new java.util.ArrayList<>();
+        String query = "SELECT DISTINCT req.request_id, req.user_id, req.location_id, req.category, " +
+                "req.urgency, req.description, req.status, req.created_at, " +
+                "CONCAT(reqLoc.city, ', ', reqLoc.district) AS full_address, " +
+                "MIN(6371 * ACOS(LEAST(1, GREATEST(-1, " +
+                "COS(RADIANS(reqLoc.latitude)) * COS(RADIANS(resLoc.latitude)) * " +
+                "COS(RADIANS(resLoc.longitude) - RADIANS(reqLoc.longitude)) + " +
+                "SIN(RADIANS(reqLoc.latitude)) * SIN(RADIANS(resLoc.latitude))))) AS distance_km " +
+                "FROM AID_REQUEST req JOIN LOCATION reqLoc ON req.location_id=reqLoc.location_id " +
+                "JOIN RESOURCE resource ON LOWER(resource.category)=LOWER(req.category) " +
+                "AND resource.user_id=? AND resource.quantity >= 1 + " +
+                "(SELECT COALESCE(SUM(reserved.assigned_quantity),0) FROM ASSIGNMENT reserved " +
+                "WHERE reserved.resource_id=resource.resource_id " +
+                "AND LOWER(reserved.status) IN ('assigned','on the way')) " +
+                "JOIN LOCATION resLoc ON resource.location_id=resLoc.location_id " +
+                "WHERE LOWER(req.status)='pending' AND req.user_id<>? " +
+                "GROUP BY req.request_id, req.user_id, req.location_id, req.category, req.urgency, " +
+                "req.description, req.status, req.created_at, reqLoc.city, reqLoc.district " +
+                "HAVING distance_km <= " + VOLUNTEER_RADIUS_KM + " " +
+                "ORDER BY FIELD(LOWER(req.urgency), 'high', 'medium', 'low'), distance_km, req.created_at ASC";
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(query)) {
-
-            ps.setInt(1, currentUserId);
-            ResultSet rs = ps.executeQuery();
-
-            while (rs.next()) {
-                allAvailableTasks.add(new Aid_Request(
-                        rs.getInt("request_id"),
-                        rs.getString("category"),
-                        rs.getString("urgency"),
-                        rs.getString("description")
-                ));
+            ps.setInt(1, userId);
+            ps.setInt(2, userId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    Aid_Request task = new Aid_Request(rs.getInt("request_id"), rs.getInt("user_id"),
+                            rs.getInt("location_id"), rs.getString("full_address"), rs.getString("category"),
+                            rs.getString("urgency"), rs.getString("description"), rs.getString("status"),
+                            rs.getTimestamp("created_at") == null ? null : rs.getTimestamp("created_at").toLocalDateTime());
+                    task.setDistanceKm(rs.getDouble("distance_km"));
+                    tasks.add(task);
+                }
             }
-
-            renderAvailableTaskCards();
-
+            return tasks;
         } catch (SQLException e) {
-            e.printStackTrace();
-            System.out.println("Failed to load available tasks.");
+            throw new RuntimeException(e);
         }
     }
 
@@ -334,16 +527,20 @@ public class VolunteerController {
             VBox infoBox = new VBox(4);
             HBox.setHgrow(infoBox, Priority.ALWAYS);
 
-            Label titleLbl = new Label("REQ-" + req.getRequestId() + " • " + req.getCategory().toUpperCase() + " Request");
+            Label titleLbl = new Label("REQ-" + req.getRequestId() + " • " +
+                    safeUpper(req.getCategory()) + " Request");
             titleLbl.getStyleClass().add("task-title");
 
-            Label descLbl = new Label(req.getDescription());
+            Label descLbl = new Label(safeText(req.getDescription()));
             descLbl.setWrapText(true);
             descLbl.getStyleClass().add("task-meta");
 
             infoBox.getChildren().addAll(titleLbl, descLbl);
+            Label distanceLbl = new Label(String.format(Locale.ROOT, "%.1f km away", req.getDistanceKm()));
+            distanceLbl.getStyleClass().add("task-meta");
+            infoBox.getChildren().add(distanceLbl);
 
-            Label urgencyBadge = new Label(req.getUrgency().toUpperCase());
+            Label urgencyBadge = new Label(safeUpper(req.getUrgency()));
             urgencyBadge.getStyleClass().add(
                     "HIGH".equalsIgnoreCase(req.getUrgency()) ? "urgency-badge-high" : "urgency-badge-medium"
             );
@@ -358,57 +555,89 @@ public class VolunteerController {
     }
 
     private void claimTask(Aid_Request request) {
-        String findResourceQuery = "SELECT resource_id FROM RESOURCE WHERE user_id = ? AND LOWER(category) = LOWER(?) AND quantity > 0 LIMIT 1";
+        if (currentUserId <= 0) return;
+        final int userId = currentUserId;
 
+        CompletableFuture.runAsync(() -> claimTaskTransaction(request.getRequestId(), request.getCategory(), userId), BACKGROUND_EXECUTOR)
+                .thenRun(() -> Platform.runLater(() -> {
+                    showAlert(Alert.AlertType.INFORMATION, "Task Claimed", "You have successfully claimed this task!");
+                    loadAvailableTasks();
+                    loadActiveTasks();
+                }))
+                .exceptionally(error -> {
+                    LOGGER.log(Level.WARNING, "Could not claim task", error);
+                    Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "Task Unavailable",
+                            "This task may already be claimed or no matching resource is available."));
+                    return null;
+                });
+    }
+
+    private void claimTaskTransaction(int requestId, String category, int userId) {
         try (Connection conn = DatabaseConnection.getConnection()) {
-            int matchedResourceId = -1;
-            try (PreparedStatement psFind = conn.prepareStatement(findResourceQuery)) {
-                psFind.setInt(1, currentUserId);
-                psFind.setString(2, request.getCategory());
-                ResultSet rs = psFind.executeQuery();
-                if (rs.next()) {
-                    matchedResourceId = rs.getInt("resource_id");
-                }
-            }
-
-            if (matchedResourceId == -1) {
-                showAlert(Alert.AlertType.WARNING, "Resource Missing",
-                        "You cannot claim this task because you do not have any '" + request.getCategory() + "' registered in your resources.");
-                return;
-            }
-
             conn.setAutoCommit(false);
-
             try {
-                String insertAssignment = "INSERT INTO ASSIGNMENT (request_id, resource_id, status) VALUES (?, ?, 'Assigned')";
-                try (PreparedStatement psAssign = conn.prepareStatement(insertAssignment)) {
-                    psAssign.setInt(1, request.getRequestId());
-                    psAssign.setInt(2, matchedResourceId);
-                    psAssign.executeUpdate();
+                String requestStatus;
+                try (PreparedStatement requestLock = conn.prepareStatement(
+                        "SELECT status FROM AID_REQUEST WHERE request_id = ? FOR UPDATE")) {
+                    requestLock.setInt(1, requestId);
+                    try (ResultSet rs = requestLock.executeQuery()) {
+                        if (!rs.next()) throw new SQLException("Request not found");
+                        requestStatus = rs.getString("status");
+                    }
+                }
+                if (!"pending".equalsIgnoreCase(requestStatus)) {
+                    throw new SQLException("Request is no longer pending");
                 }
 
-                String updateRequest = "UPDATE AID_REQUEST SET status = 'In Progress' WHERE request_id = ?";
-                try (PreparedStatement psUpdate = conn.prepareStatement(updateRequest)) {
-                    psUpdate.setInt(1, request.getRequestId());
-                    psUpdate.executeUpdate();
+                int resourceId;
+                try (PreparedStatement resourceLock = conn.prepareStatement(
+                        "SELECT resource.resource_id FROM RESOURCE resource " +
+                                "JOIN LOCATION resLoc ON resource.location_id=resLoc.location_id " +
+                                "JOIN AID_REQUEST req ON req.request_id=? " +
+                                "JOIN LOCATION reqLoc ON req.location_id=reqLoc.location_id " +
+                                "WHERE resource.user_id=? AND LOWER(resource.category)=LOWER(?) " +
+                                "AND resource.quantity >= 1 + (SELECT COALESCE(SUM(reserved.assigned_quantity),0) " +
+                                "FROM ASSIGNMENT reserved WHERE reserved.resource_id=resource.resource_id " +
+                                "AND LOWER(reserved.status) IN ('assigned','on the way')) " +
+                                "AND (6371 * ACOS(LEAST(1, GREATEST(-1, " +
+                                "COS(RADIANS(reqLoc.latitude))*COS(RADIANS(resLoc.latitude))*" +
+                                "COS(RADIANS(resLoc.longitude)-RADIANS(reqLoc.longitude))+" +
+                                "SIN(RADIANS(reqLoc.latitude))*SIN(RADIANS(resLoc.latitude))))) <= " + VOLUNTEER_RADIUS_KM + " " +
+                                "ORDER BY (6371 * ACOS(LEAST(1, GREATEST(-1, " +
+                                "COS(RADIANS(reqLoc.latitude))*COS(RADIANS(resLoc.latitude))*" +
+                                "COS(RADIANS(resLoc.longitude)-RADIANS(reqLoc.longitude))+" +
+                                "SIN(RADIANS(reqLoc.latitude))*SIN(RADIANS(resLoc.latitude))))) LIMIT 1 FOR UPDATE")) {
+                    resourceLock.setInt(1, requestId);
+                    resourceLock.setInt(2, userId);
+                    resourceLock.setString(3, category);
+                    try (ResultSet rs = resourceLock.executeQuery()) {
+                        if (!rs.next()) throw new SQLException("No matching resource available");
+                        resourceId = rs.getInt("resource_id");
+                    }
                 }
 
+                try (PreparedStatement insert = conn.prepareStatement(
+                        "INSERT INTO ASSIGNMENT (request_id, resource_id, assigned_quantity, status) " +
+                                "VALUES (?, ?, 1, 'Assigned')")) {
+                    insert.setInt(1, requestId);
+                    insert.setInt(2, resourceId);
+                    insert.executeUpdate();
+                }
+
+                try (PreparedStatement update = conn.prepareStatement(
+                        "UPDATE AID_REQUEST SET status = 'In Progress' WHERE request_id = ? AND LOWER(status) = 'pending'")) {
+                    update.setInt(1, requestId);
+                    if (update.executeUpdate() != 1) throw new SQLException("Request status changed");
+                }
                 conn.commit();
-
-                showAlert(Alert.AlertType.INFORMATION, "Task Claimed", "You have successfully claimed this task!");
-                loadAvailableTasks();
-                loadActiveTasks();
-
-            } catch (SQLException ex) {
+            } catch (SQLException e) {
                 conn.rollback();
-                throw ex;
+                throw e;
             } finally {
                 conn.setAutoCommit(true);
             }
-
         } catch (SQLException e) {
-            e.printStackTrace();
-            showAlert(Alert.AlertType.ERROR, "Database Error", "An error occurred while claiming the task.");
+            throw new RuntimeException(e);
         }
     }
 
@@ -417,44 +646,50 @@ public class VolunteerController {
     // =========================================================================
 
     private void loadActiveTasks() {
-        activeTasksContainer.getChildren().clear();
-        int count = 0;
+        if (currentUserId <= 0) return;
+        final int userId = currentUserId;
+        CompletableFuture.supplyAsync(() -> fetchActiveTasks(userId), BACKGROUND_EXECUTOR)
+                .thenAccept(tasks -> Platform.runLater(() -> {
+                    activeTasksContainer.getChildren().clear();
+                    for (ActiveTask task : tasks) {
+                        activeTasksContainer.getChildren().add(createActiveTaskCard(task.assignmentId(),
+                                task.requestId(), task.category(), task.description(), task.status(),
+                                task.quantity(), task.city(), task.district()));
+                    }
+                    activeTaskCountBadge.setText(tasks.size() + " IN PROGRESS");
+                }))
+                .exceptionally(error -> {
+                    LOGGER.log(Level.WARNING, "Could not load active tasks", error);
+                    return null;
+                });
+    }
 
-        String query = "SELECT a.assignment_id, req.request_id, req.category, req.description, a.status, loc.city, loc.district " +
-                "FROM ASSIGNMENT a " +
+    private java.util.List<ActiveTask> fetchActiveTasks(int userId) {
+        java.util.List<ActiveTask> tasks = new java.util.ArrayList<>();
+        String query = "SELECT a.assignment_id, req.request_id, req.category, req.description, " +
+                "a.status, a.assigned_quantity, loc.city, loc.district FROM ASSIGNMENT a " +
                 "JOIN AID_REQUEST req ON a.request_id = req.request_id " +
                 "JOIN RESOURCE res ON a.resource_id = res.resource_id " +
                 "LEFT JOIN LOCATION loc ON req.location_id = loc.location_id " +
-                "WHERE res.user_id = ? AND a.status IN ('Assigned', 'On the Way')";
-
+                "WHERE res.user_id = ? AND LOWER(a.status) IN ('assigned', 'on the way')";
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(query)) {
-
-            ps.setInt(1, currentUserId);
-            ResultSet rs = ps.executeQuery();
-
-            while (rs.next()) {
-                count++;
-                int assignId = rs.getInt("assignment_id");
-                int reqId = rs.getInt("request_id");
-                String cat = rs.getString("category");
-                String desc = rs.getString("description");
-                String status = rs.getString("status");
-                String city = rs.getString("city");
-                String district = rs.getString("district");
-
-                VBox card = createActiveTaskCard(assignId, reqId, cat, desc, status, city, district);
-                activeTasksContainer.getChildren().add(card);
+            ps.setInt(1, userId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    tasks.add(new ActiveTask(rs.getInt("assignment_id"), rs.getInt("request_id"),
+                            rs.getString("category"), rs.getString("description"), rs.getString("status"),
+                            rs.getInt("assigned_quantity"), rs.getString("city"), rs.getString("district")));
+                }
             }
-
-            activeTaskCountBadge.setText(count + " IN PROGRESS");
-
+            return tasks;
         } catch (SQLException e) {
-            e.printStackTrace();
+            throw new RuntimeException(e);
         }
     }
 
-    private VBox createActiveTaskCard(int assignId, int reqId, String category, String description, String status, String city, String district) {
+    private VBox createActiveTaskCard(int assignId, int reqId, String category, String description,
+                                      String status, int assignedQuantity, String city, String district) {
         VBox card = new VBox(12);
         card.getStyleClass().add("active-task-card");
         card.setPrefWidth(360);
@@ -468,15 +703,15 @@ public class VolunteerController {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        Label statusBadge = new Label(status.toUpperCase());
+        Label statusBadge = new Label(safeUpper(status));
         statusBadge.getStyleClass().add("urgency-badge-high");
 
         topRow.getChildren().addAll(idLabel, spacer, statusBadge);
 
-        Label titleLabel = new Label(category.toUpperCase() + " Delivery");
+        Label titleLabel = new Label(safeUpper(category) + " Delivery (" + assignedQuantity + " unit)");
         titleLabel.getStyleClass().add("task-title");
 
-        Label descLabel = new Label(description);
+        Label descLabel = new Label(safeText(description));
         descLabel.setWrapText(true);
         descLabel.getStyleClass().add("task-meta");
 
@@ -494,12 +729,7 @@ public class VolunteerController {
         } else if ("On the Way".equalsIgnoreCase(status)) {
             actionBtn.setText("Mark Delivered");
             actionBtn.getStyleClass().add("indigo-gradient-btn");
-            actionBtn.setOnAction(e -> {
-                updateAssignmentStatus(assignId, "Delivered");
-                deductVolunteerResource(currentUserId, category, 1);
-                loadActiveTasks();
-                loadMyResources();
-            });
+            actionBtn.setOnAction(e -> completeDelivery(assignId));
         }
 
         card.getChildren().addAll(topRow, titleLabel, descLabel, locLabel, actionBtn);
@@ -507,51 +737,178 @@ public class VolunteerController {
     }
 
     private void updateAssignmentStatus(int assignmentId, String newStatus) {
-        try (Connection conn = DatabaseConnection.getConnection()) {
-            String updateAssign = "UPDATE ASSIGNMENT SET status = ? WHERE assignment_id = ?";
-            try (PreparedStatement ps = conn.prepareStatement(updateAssign)) {
+        CompletableFuture.runAsync(() -> {
+            String updateAssign = "UPDATE ASSIGNMENT a JOIN RESOURCE r ON r.resource_id = a.resource_id " +
+                    "SET a.status = ? WHERE a.assignment_id = ? AND r.user_id = ? " +
+                    "AND LOWER(a.status) = 'assigned'";
+            try (Connection conn = DatabaseConnection.getConnection();
+                 PreparedStatement ps = conn.prepareStatement(updateAssign)) {
                 ps.setString(1, newStatus);
                 ps.setInt(2, assignmentId);
-                ps.executeUpdate();
+                ps.setInt(3, currentUserId);
+                if (ps.executeUpdate() != 1) throw new SQLException("Assignment is no longer available");
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
             }
+        }, BACKGROUND_EXECUTOR).thenRun(() -> Platform.runLater(this::loadActiveTasks))
+                .exceptionally(error -> {
+                    LOGGER.log(Level.WARNING, "Could not update assignment status", error);
+                    Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "Update Failed",
+                            "The assignment status could not be updated."));
+                    return null;
+                });
+    }
 
-            if ("Delivered".equalsIgnoreCase(newStatus)) {
-                String updateReq = "UPDATE AID_REQUEST SET status = 'Fulfilled' WHERE request_id = (SELECT request_id FROM ASSIGNMENT WHERE assignment_id = ?)";
-                try (PreparedStatement psReq = conn.prepareStatement(updateReq)) {
-                    psReq.setInt(1, assignmentId);
-                    psReq.executeUpdate();
+    private void completeDelivery(int assignmentId) {
+        CompletableFuture.runAsync(() -> completeDeliveryTransaction(assignmentId, currentUserId), BACKGROUND_EXECUTOR)
+                .thenRun(() -> Platform.runLater(() -> {
+                    showAlert(Alert.AlertType.INFORMATION, "Delivery Completed", "The assignment was marked as delivered.");
+                    loadActiveTasks();
+                    loadMyResources();
+                }))
+                .exceptionally(error -> {
+                    LOGGER.log(Level.WARNING, "Could not complete delivery", error);
+                    Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "Delivery Failed",
+                            "The assignment was not delivered because the required resource is unavailable."));
+                    return null;
+                });
+    }
+
+    private void completeDeliveryTransaction(int assignmentId, int userId) {
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            conn.setAutoCommit(false);
+            try {
+                int resourceId;
+                int quantity;
+                int requestId;
+                try (PreparedStatement statement = conn.prepareStatement(
+                        "SELECT a.resource_id, a.assigned_quantity, a.request_id " +
+                                "FROM ASSIGNMENT a JOIN RESOURCE r ON r.resource_id = a.resource_id " +
+                        "WHERE a.assignment_id = ? AND r.user_id = ? AND LOWER(a.status) = 'on the way' FOR UPDATE")) {
+                    statement.setInt(1, assignmentId);
+                    statement.setInt(2, userId);
+                    try (ResultSet rs = statement.executeQuery()) {
+                        if (!rs.next()) throw new SQLException("Assignment not found or not owned by user");
+                        resourceId = rs.getInt("resource_id");
+                        quantity = Math.max(1, rs.getInt("assigned_quantity"));
+                        requestId = rs.getInt("request_id");
+                    }
                 }
-            }
-            loadActiveTasks();
 
+                try (PreparedStatement updateResource = conn.prepareStatement(
+                        "UPDATE RESOURCE SET quantity = quantity - ? " +
+                                "WHERE resource_id = ? AND user_id = ? AND quantity >= ?")) {
+                    updateResource.setInt(1, quantity);
+                    updateResource.setInt(2, resourceId);
+                    updateResource.setInt(3, userId);
+                    updateResource.setInt(4, quantity);
+                    if (updateResource.executeUpdate() != 1) {
+                        throw new SQLException("Insufficient resource quantity");
+                    }
+                }
+
+                try (PreparedStatement updateAssignment = conn.prepareStatement(
+                        "UPDATE ASSIGNMENT SET status = 'Delivered' WHERE assignment_id = ? AND LOWER(status) = 'on the way'")) {
+                    updateAssignment.setInt(1, assignmentId);
+                    if (updateAssignment.executeUpdate() != 1) throw new SQLException("Assignment status changed");
+                }
+
+                try (PreparedStatement updateRequest = conn.prepareStatement(
+                        "UPDATE AID_REQUEST SET status = 'Fulfilled' WHERE request_id = ?")) {
+                    updateRequest.setInt(1, requestId);
+                    updateRequest.executeUpdate();
+                }
+                conn.commit();
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            } finally {
+                conn.setAutoCommit(true);
+            }
         } catch (SQLException e) {
-            e.printStackTrace();
+            throw new RuntimeException(e);
         }
     }
 
-    private void deductVolunteerResource(int userId, String category, int amountToDeduct) {
-        String query = "UPDATE RESOURCE SET quantity = quantity - ? " +
-                "WHERE user_id = ? AND UPPER(category) = UPPER(?) AND quantity >= ? " +
-                "LIMIT 1";
+    public class MapBridge {
+        public void setLocation(double latitude, double longitude) {
+            final long version = ++locationRequestVersion;
+            locationLookupInProgress = true;
+            Platform.runLater(() -> volunteerMapStatusLabel.setText("DETERMINING LOCATION..."));
 
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(query)) {
-
-            pstmt.setInt(1, amountToDeduct);
-            pstmt.setInt(2, userId);
-            pstmt.setString(3, category);
-            pstmt.setInt(4, amountToDeduct);
-
-            int rowsAffected = pstmt.executeUpdate();
-            if (rowsAffected > 0) {
-                System.out.println("Successfully deducted " + amountToDeduct + " unit(s) of " + category + ".");
-            } else {
-                System.out.println("Warning: Not enough " + category + " found in inventory to deduct!");
-            }
-
-        } catch (SQLException e) {
-            e.printStackTrace();
+            CompletableFuture.supplyAsync(() -> fetchLocationName(latitude, longitude), BACKGROUND_EXECUTOR)
+                    .thenAccept(location -> Platform.runLater(() -> {
+                        if (version != locationRequestVersion) return;
+                        selectedLatitude = latitude;
+                        selectedLongitude = longitude;
+                        selectedCity = location[0];
+                        selectedDistrict = location[1];
+                        locationLookupInProgress = false;
+                        volunteerMapStatusLabel.setText("SELECTED: " + location[1].toUpperCase(Locale.ROOT)
+                                + ", " + location[0].toUpperCase(Locale.ROOT));
+                    }))
+                    .exceptionally(error -> {
+                        LOGGER.log(Level.WARNING, "Could not determine volunteer location", error);
+                        Platform.runLater(() -> {
+                            if (version != locationRequestVersion) return;
+                            selectedLatitude = latitude;
+                            selectedLongitude = longitude;
+                            selectedCity = "Unknown";
+                            selectedDistrict = "Unknown";
+                            locationLookupInProgress = false;
+                            volunteerMapStatusLabel.setText("LOCATION DETAILS UNAVAILABLE");
+                        });
+                        return null;
+                    });
         }
+    }
+
+    private String[] fetchLocationName(double latitude, double longitude) {
+        java.net.HttpURLConnection connection = null;
+        try {
+            java.net.URL url = new java.net.URL(
+                    "https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=" +
+                            latitude + "&longitude=" + longitude + "&localityLanguage=tr");
+            connection = (java.net.HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("GET");
+            connection.setRequestProperty("User-Agent", "CrisasterHub/1.0");
+            connection.setConnectTimeout(5000);
+            connection.setReadTimeout(5000);
+            if (connection.getResponseCode() != 200) throw new IOException("Reverse-geocoding HTTP error");
+
+            StringBuilder body = new StringBuilder();
+            try (java.util.Scanner scanner = new java.util.Scanner(connection.getInputStream(), "UTF-8")) {
+                while (scanner.hasNextLine()) body.append(scanner.nextLine());
+            }
+            JsonObject object = JsonParser.parseString(body.toString()).getAsJsonObject();
+            String city = jsonValue(object, "city");
+            if ("Unknown".equals(city)) city = jsonValue(object, "principalSubdivision");
+            return new String[]{city, jsonValue(object, "locality")};
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
+    private String jsonValue(JsonObject object, String key) {
+        JsonElement value = object.get(key);
+        return value != null && !value.isJsonNull() && value.isJsonPrimitive()
+                ? value.getAsString() : "Unknown";
+    }
+
+    private String createMapHtml() {
+        return "<!DOCTYPE html><html><head>" +
+                "<link rel=\"stylesheet\" href=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.css\">" +
+                "<script src=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.js\"></script>" +
+                "<style>html,body,#map{width:100%;height:100%;margin:0;background:#081328}</style>" +
+                "</head><body><div id=\"map\"></div><script>" +
+                "var map=L.map('map').setView([39.7767,30.5206],13);" +
+                "L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(map);" +
+                "var marker;map.on('click',function(e){if(marker)map.removeLayer(marker);" +
+                "marker=L.marker([e.latlng.lat,e.latlng.lng]).addTo(map);" +
+                "if(typeof javaConnector!=='undefined')javaConnector.setLocation(e.latlng.lat,e.latlng.lng);});" +
+                "</script></body></html>";
     }
 
     // =========================================================================
@@ -561,6 +918,7 @@ public class VolunteerController {
     @FXML
     private void handleLogout(ActionEvent event) {
         try {
+            AuthService.clearSession();
             Parent loginRoot = FXMLLoader.load(getClass().getResource("/com/pnrl/crisasterhub/fxml/login.fxml"));
             Scene loginScene = new Scene(loginRoot);
             Stage stage = (Stage) ((Node) event.getSource()).getScene().getWindow();
@@ -568,7 +926,7 @@ public class VolunteerController {
             stage.setFullScreen(true);
             stage.centerOnScreen();
         } catch (IOException e) {
-            e.printStackTrace();
+            LOGGER.log(Level.WARNING, "Could not return to login screen", e);
             showAlert(Alert.AlertType.ERROR, "Error", "Could not return to the login screen.");
         }
     }
@@ -580,5 +938,24 @@ public class VolunteerController {
         alert.setHeaderText(null);
         alert.setContentText(message);
         alert.showAndWait();
+    }
+
+    private String safeText(String value) {
+        return value == null || value.isBlank() ? "-" : value;
+    }
+
+    private String safeUpper(String value) {
+        return safeText(value).toUpperCase(Locale.ROOT);
+    }
+
+    private static double configuredRadiusKm() {
+        String configured = System.getProperty("VOLUNTEER_RADIUS_KM");
+        if (configured == null || configured.isBlank()) configured = System.getenv("VOLUNTEER_RADIUS_KM");
+        try {
+            double radius = Double.parseDouble(configured == null ? "" : configured);
+            return radius > 0 && radius <= 1000 ? radius : DEFAULT_VOLUNTEER_RADIUS_KM;
+        } catch (NumberFormatException e) {
+            return DEFAULT_VOLUNTEER_RADIUS_KM;
+        }
     }
 }

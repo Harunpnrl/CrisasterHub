@@ -227,7 +227,7 @@ public class LoginController {
                     break;
 
                 case "operator":
-                    loader = new FXMLLoader(getClass().getResource("/com/pnrl/crisasterhub/fxml/operatorPanel.fxml"));
+                    loader = new FXMLLoader(getClass().getResource("/com/pnrl/crisasterhub/fxml/operator.fxml"));
                     root = loader.load();
                     break;
 

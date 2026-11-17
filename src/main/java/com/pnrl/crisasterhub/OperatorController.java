@@ -3,6 +3,12 @@ package com.pnrl.crisasterhub;
 import com.pnrl.crisasterhub.dbclasses.Aid_Request;
 import com.pnrl.crisasterhub.dbclasses.Assignment;
 import com.pnrl.crisasterhub.dbclasses.Resource;
+import javafx.application.Platform;
+import javafx.beans.property.SimpleStringProperty;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import javafx.collections.transformation.FilteredList;
+import javafx.collections.transformation.SortedList;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
@@ -10,660 +16,631 @@ import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
-import javafx.stage.Stage;
 import javafx.scene.layout.HBox;
-import javafx.beans.property.SimpleStringProperty;
-import javafx.collections.FXCollections;
-import javafx.collections.ObservableList;
-
-import java.sql.*;
+import javafx.scene.layout.VBox;
+import javafx.stage.Stage;
 
 import java.io.IOException;
-import java.util.Arrays;
+import java.sql.*;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
+/** Operator dashboard. All mutations are validated and committed atomically. */
 public class OperatorController {
+    private static final Logger LOGGER = Logger.getLogger(OperatorController.class.getName());
+    private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool(r -> {
+        Thread thread = new Thread(r, "operator-background-task");
+        thread.setDaemon(true);
+        return thread;
+    });
 
-    @FXML
-    private TextField searchField;
-    @FXML
-    private TextField resourceSearchField;
-    @FXML
-    private TableView<Aid_Request> aidRequestsTable;
-    @FXML
-    private TableColumn<Aid_Request, String> colReqId;
-    @FXML
-    private TableColumn<Aid_Request, String> colUserId;
-    @FXML
-    private TableColumn<Aid_Request, String> colLocationId;
-    @FXML
-    private TableColumn<Aid_Request, String> colCategory;
-    @FXML
-    private TableColumn<Aid_Request, String> colUrgency;
-    @FXML
-    private TableColumn<Aid_Request, String> colDescription;
-    @FXML
-    private TableColumn<Aid_Request, String> colStatus;
-    @FXML
-    private TableColumn<Aid_Request, String> colCreatedAt;
-    @FXML
-    private TableColumn<Aid_Request, Void> colActions;
-    // --- Resource Table Variables ---
-    @FXML
-    private TableView<Resource> resourceTable;
-    @FXML
-    private TableColumn<Resource, String> colResId;
-    @FXML
-    private TableColumn<Resource, String> colResUserId;
-    @FXML
-    private TableColumn<Resource, String> colResLocationId;
-    @FXML
-    private TableColumn<Resource, String> colResCategory;
-    @FXML
-    private TableColumn<Resource, String> colResQty;
-    @FXML
-    private TableColumn<Resource, String> colResDesc;
-    @FXML
-    private TableColumn<Resource, String> colResCreatedAt;
-    @FXML
-    private TableColumn<Resource, Void> colResActions;
-    // --- Assignment Table Variables ---
-    @FXML
-    private TableView<Assignment> assignmentTable;
-    @FXML
-    private TableColumn<Assignment, String> colAsnId;
-    @FXML
-    private TableColumn<Assignment, String> colAsnReqId;
-    @FXML
-    private TableColumn<Assignment, String> colAsnResId;
-    @FXML
-    private TableColumn<Assignment, String> colAsnQty;
-    @FXML
-    private TableColumn<Assignment, String> colAsnStatus;
-    @FXML
-    private TableColumn<Assignment, String> colAsnAssignedAt;
-    @FXML
-    private TableColumn<Assignment, String> colAsnUpdatedAt;
-    @FXML
-    private TableColumn<Assignment, Void> colAsnActions;
-    // --- Dashboard Card Variables ---
-    @FXML
-    private Label foodStockLabel;
-    @FXML
-    private ProgressBar foodProgressBar;
+    private static final String PENDING = "pending";
+    private static final String IN_PROGRESS = "in progress";
+    private static final String ASSIGNED = "assigned";
+    private static final String ON_THE_WAY = "on the way";
+    private static final String DELIVERED = "delivered";
+    private static final String FULFILLED = "fulfilled";
 
-    @FXML
-    private Label medStockLabel;
-    @FXML
-    private ProgressBar medProgressBar;
+    @FXML private TextField searchField;
+    @FXML private TextField resourceSearchField;
+    @FXML private TextField assignSearchField;
+    @FXML private TableView<Aid_Request> aidRequestsTable;
+    @FXML private TableColumn<Aid_Request, String> colReqId, colUserId, colLocationId, colCategory,
+            colUrgency, colDescription, colStatus, colCreatedAt;
+    @FXML private TableColumn<Aid_Request, Void> colActions;
+    @FXML private TableView<Resource> resourceTable;
+    @FXML private TableColumn<Resource, String> colResId, colResUserId, colResLocationId, colResCategory,
+            colResQty, colResDesc, colResCreatedAt;
+    @FXML private TableColumn<Resource, Void> colResActions;
+    @FXML private TableView<Assignment> assignmentTable;
+    @FXML private TableColumn<Assignment, String> colAsnId, colAsnReqId, colAsnResId, colAsnQty,
+            colAsnStatus, colAsnAssignedAt, colAsnUpdatedAt;
+    @FXML private TableColumn<Assignment, Void> colAsnActions;
+    @FXML private Label foodStockLabel, medStockLabel, shelterStockLabel, clothingStockLabel;
+    @FXML private ProgressBar foodProgressBar, medProgressBar, shelterProgressBar, clothingProgressBar;
+    @FXML private Label foodStatusBadge, medStatusBadge, shelterStatusBadge, clothingStatusBadge;
+    @FXML private Label foodPercentLabel, medPercentLabel, shelterPercentLabel, clothingPercentLabel;
+    @FXML private Label statActiveReqsLabel, statPendingAsnLabel, statDepotsLabel;
 
-    @FXML
-    private Label shelterStockLabel;
-    @FXML
-    private ProgressBar shelterProgressBar;
-
-    @FXML
-    private Label clothingStockLabel;
-    @FXML
-    private ProgressBar clothingProgressBar;
-
-    @FXML
-    private Label foodBadge;
-    @FXML
-    private Label medBadge;
-    @FXML
-    private Label shelterBadge;
-    @FXML
-    private Label clothingBadge;
-    @FXML
-    private TextField assignSearchField;
-
-    private ObservableList<Assignment> assignmentList = FXCollections.observableArrayList();
-
-    private ObservableList<Resource> resourceList = FXCollections.observableArrayList();
-
-    private ObservableList<Aid_Request> aidRequestList = FXCollections.observableArrayList();
+    private final ObservableList<Assignment> assignmentList = FXCollections.observableArrayList();
+    private final ObservableList<Resource> resourceList = FXCollections.observableArrayList();
+    private final ObservableList<Aid_Request> aidRequestList = FXCollections.observableArrayList();
 
     @FXML
     public void initialize() {
-        // ══════════════════════════════════════════════════════════
-        // 1. AID REQUESTS SEARCH BAR
-        // ══════════════════════════════════════════════════════════
-        javafx.collections.transformation.FilteredList<Aid_Request> filteredRequests = new javafx.collections.transformation.FilteredList<>(aidRequestList, p -> true);
-
-        searchField.textProperty().addListener((observable, oldValue, newValue) -> {
-            filteredRequests.setPredicate(req -> {
-                if (newValue == null || newValue.isEmpty()) return true;
-                String lowerCaseFilter = newValue.toLowerCase();
-
-                return req.getCategory().toLowerCase().contains(lowerCaseFilter) || req.getUrgency().toLowerCase().contains(lowerCaseFilter) || req.getDescription().toLowerCase().contains(lowerCaseFilter) || req.getStatus().toLowerCase().contains(lowerCaseFilter);
-            });
-        });
-
-        javafx.collections.transformation.SortedList<Aid_Request> sortedRequests = new javafx.collections.transformation.SortedList<>(filteredRequests);
-        sortedRequests.comparatorProperty().bind(aidRequestsTable.comparatorProperty());
-        aidRequestsTable.setItems(sortedRequests);
-
-
-        // ══════════════════════════════════════════════════════════
-        // 2. RESOURCE INVENTORY SEARCH BAR
-        // ══════════════════════════════════════════════════════════
-        javafx.collections.transformation.FilteredList<Resource> filteredResources = new javafx.collections.transformation.FilteredList<>(resourceList, p -> true);
-
-        resourceSearchField.textProperty().addListener((observable, oldValue, newValue) -> {
-            filteredResources.setPredicate(res -> {
-                if (newValue == null || newValue.isEmpty()) return true;
-                String lowerCaseFilter = newValue.toLowerCase();
-
-                return res.getCategory().toLowerCase().contains(lowerCaseFilter) || res.getDescription().toLowerCase().contains(lowerCaseFilter);
-            });
-        });
-
-        javafx.collections.transformation.SortedList<Resource> sortedResources = new javafx.collections.transformation.SortedList<>(filteredResources);
-        sortedResources.comparatorProperty().bind(resourceTable.comparatorProperty());
-        resourceTable.setItems(sortedResources);
-
-        colReqId.setCellValueFactory(cellData -> new SimpleStringProperty("#REQ-" + cellData.getValue().getRequestId()));
-        colUserId.setCellValueFactory(cellData -> new SimpleStringProperty("USR-" + cellData.getValue().getUserId()));
-        colLocationId.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getLocationName()));
-        colCategory.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getCategory().toUpperCase()));
-        colUrgency.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getUrgency().toUpperCase()));
-        colDescription.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getDescription()));
-        colStatus.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getStatus().toUpperCase()));
-        colCreatedAt.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getCreatedAt().toString()));
-
-        colResId.setCellValueFactory(cellData -> new SimpleStringProperty("#RES-" + cellData.getValue().getResourceId()));
-        colResUserId.setCellValueFactory(cellData -> new SimpleStringProperty("USR-" + cellData.getValue().getUserId()));
-        colResLocationId.setCellValueFactory(cellData -> new SimpleStringProperty("LOC-" + cellData.getValue().getLocationId()));
-        colResCategory.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getCategory().toUpperCase()));
-        colResQty.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getQuantity() + " Units"));
-        colResDesc.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getDescription()));
-
-        colResCreatedAt.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getCreatedAt().toString()));
-
-        colAsnId.setCellValueFactory(cellData -> new SimpleStringProperty("#ASN-" + cellData.getValue().getAssignmentId()));
-        colAsnReqId.setCellValueFactory(cellData -> new SimpleStringProperty("#REQ-" + cellData.getValue().getRequestId()));
-        colAsnResId.setCellValueFactory(cellData -> new SimpleStringProperty("#RES-" + cellData.getValue().getResourceId()));
-        colAsnQty.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getAssignedQuantity() + " Units"));
-        colAsnStatus.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getStatus().toUpperCase()));
-        colAsnAssignedAt.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getAssignedAt().toString()));
-
-        colAsnUpdatedAt.setCellValueFactory(cellData -> {
-            if (cellData.getValue().getUpdatedAt() != null) {
-                return new SimpleStringProperty(cellData.getValue().getUpdatedAt().toString());
-            }
-            return new SimpleStringProperty("-");
-        });
-
-        setupAssignmentActionButtons();
-        loadAssignments();
-
-        loadResources();
-        loadAssignments();
-
-        updateDashboardStats();
-
-        setupResourceActionButtons();
-        loadResources();
-
+        if (!AuthService.hasActiveRole("operator")) {
+            LOGGER.warning("Operator panel initialized without an active operator session");
+            Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "Access Denied",
+                    "An active operator session is required."));
+            return;
+        }
+        configureRequestTable();
+        configureResourceTable();
+        configureAssignmentTable();
         setupActionButtons();
-
-        loadAidRequests();
-
-        System.out.println("Admin Command Panel initialized.");
+        setupResourceActionButtons();
+        setupAssignmentActionButtons();
+        loadAllData();
+        LOGGER.info("Operator panel initialized");
     }
 
-
-    @FXML
-    private void handleLogout(ActionEvent event) {
-        try {
-            Parent loginRoot = FXMLLoader.load(getClass().getResource("/com/pnrl/crisasterhub/fxml/login.fxml"));
-            Scene loginScene = new Scene(loginRoot);
-            Stage stage = (Stage) ((Node) event.getSource()).getScene().getWindow();
-            stage.setScene(loginScene);
-            stage.setFullScreen(true);
-            stage.centerOnScreen();
-            System.out.println("Admin logged out successfully.");
-        } catch (IOException e) {
-            e.printStackTrace();
-            showAlert(Alert.AlertType.ERROR, "System Error", "Could not return to the login screen.");
-        }
+    private void configureRequestTable() {
+        FilteredList<Aid_Request> filtered = new FilteredList<>(aidRequestList, item -> true);
+        searchField.textProperty().addListener((obs, oldValue, value) -> filtered.setPredicate(item -> {
+            String filter = lower(value);
+            return filter.isBlank() || contains(item.getRequestId(), filter)
+                    || contains(item.getUserId(), filter) || contains(item.getLocationName(), filter)
+                    || contains(item.getCategory(), filter) || contains(item.getUrgency(), filter)
+                    || contains(item.getDescription(), filter) || contains(item.getStatus(), filter);
+        }));
+        SortedList<Aid_Request> sorted = new SortedList<>(filtered);
+        sorted.comparatorProperty().bind(aidRequestsTable.comparatorProperty());
+        aidRequestsTable.setItems(sorted);
+        colReqId.setCellValueFactory(c -> text("#REQ-" + c.getValue().getRequestId()));
+        colUserId.setCellValueFactory(c -> text("USR-" + c.getValue().getUserId()));
+        colLocationId.setCellValueFactory(c -> text(safe(c.getValue().getLocationName())));
+        colCategory.setCellValueFactory(c -> text(upper(c.getValue().getCategory())));
+        colUrgency.setCellValueFactory(c -> text(upper(c.getValue().getUrgency())));
+        colDescription.setCellValueFactory(c -> text(safe(c.getValue().getDescription())));
+        colStatus.setCellValueFactory(c -> text(upper(c.getValue().getStatus())));
+        colCreatedAt.setCellValueFactory(c -> text(format(c.getValue().getCreatedAt())));
+        configureStatusCell(colUrgency, this::urgencyClass);
+        configureStatusCell(colStatus, this::statusClass);
     }
 
-    private void loadAidRequests() {
-        aidRequestList.clear();
-        String query = "SELECT a.*, CONCAT(l.city, ', ', l.district) AS full_address " + "FROM AID_REQUEST a " + "LEFT JOIN LOCATION l ON a.location_id = l.location_id " + "ORDER BY a.created_at DESC";
+    private void configureResourceTable() {
+        FilteredList<Resource> filtered = new FilteredList<>(resourceList, item -> true);
+        resourceSearchField.textProperty().addListener((obs, oldValue, value) -> filtered.setPredicate(item -> {
+            String filter = lower(value);
+            return filter.isBlank() || contains(item.getResourceId(), filter)
+                    || contains(item.getUserId(), filter) || contains(item.getLocationId(), filter)
+                    || contains(item.getCategory(), filter) || contains(item.getQuantity(), filter)
+                    || contains(item.getDescription(), filter);
+        }));
+        SortedList<Resource> sorted = new SortedList<>(filtered);
+        sorted.comparatorProperty().bind(resourceTable.comparatorProperty());
+        resourceTable.setItems(sorted);
+        colResId.setCellValueFactory(c -> text("#RES-" + c.getValue().getResourceId()));
+        colResUserId.setCellValueFactory(c -> text("USR-" + c.getValue().getUserId()));
+        colResLocationId.setCellValueFactory(c -> text("LOC-" + c.getValue().getLocationId()));
+        colResCategory.setCellValueFactory(c -> text(upper(c.getValue().getCategory())));
+        colResQty.setCellValueFactory(c -> text(c.getValue().getQuantity() + " Units"));
+        colResDesc.setCellValueFactory(c -> text(safe(c.getValue().getDescription())));
+        colResCreatedAt.setCellValueFactory(c -> text(format(c.getValue().getCreatedAt())));
+    }
 
-        try (Connection conn = DatabaseConnection.getConnection(); Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(query)) {
+    private void configureAssignmentTable() {
+        FilteredList<Assignment> filtered = new FilteredList<>(assignmentList, item -> true);
+        assignSearchField.textProperty().addListener((obs, oldValue, value) -> filtered.setPredicate(item -> {
+            String filter = lower(value);
+            return filter.isBlank() || contains(item.getAssignmentId(), filter)
+                    || contains(item.getRequestId(), filter) || contains(item.getResourceId(), filter)
+                    || contains(item.getAssignedQuantity(), filter) || contains(item.getStatus(), filter);
+        }));
+        SortedList<Assignment> sorted = new SortedList<>(filtered);
+        sorted.comparatorProperty().bind(assignmentTable.comparatorProperty());
+        assignmentTable.setItems(sorted);
+        colAsnId.setCellValueFactory(c -> text("#ASN-" + c.getValue().getAssignmentId()));
+        colAsnReqId.setCellValueFactory(c -> text("#REQ-" + c.getValue().getRequestId()));
+        colAsnResId.setCellValueFactory(c -> text("#RES-" + c.getValue().getResourceId()));
+        colAsnQty.setCellValueFactory(c -> text(c.getValue().getAssignedQuantity() + " Units"));
+        colAsnStatus.setCellValueFactory(c -> text(upper(c.getValue().getStatus())));
+        colAsnAssignedAt.setCellValueFactory(c -> text(format(c.getValue().getAssignedAt())));
+        colAsnUpdatedAt.setCellValueFactory(c -> text(format(c.getValue().getUpdatedAt())));
+        configureStatusCell(colAsnStatus, this::statusClass);
+    }
 
-            while (rs.next()) {
-                Aid_Request req = new Aid_Request(rs.getInt("request_id"), rs.getInt("user_id"), rs.getInt("location_id"), rs.getString("full_address"), rs.getString("category"), rs.getString("urgency"), rs.getString("description"), rs.getString("status"), rs.getTimestamp("created_at").toLocalDateTime());
-                aidRequestList.add(req);
+    private <T> void configureStatusCell(TableColumn<T, String> column, java.util.function.Function<String, String> style) {
+        column.setCellFactory(ignored -> new TableCell<>() {
+            @Override protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty ? null : item);
+                getStyleClass().removeIf(value -> value.startsWith("badge-"));
+                if (!empty) getStyleClass().add(style.apply(item));
             }
+        });
+    }
 
+    private void loadAllData() {
+        CompletableFuture.runAsync(this::ensureAuditTable, EXECUTOR);
+        CompletableFuture.allOf(
+                loadRequests(), loadResources(), loadAssignments(), loadDashboard()).exceptionally(error -> {
+            LOGGER.log(Level.WARNING, "Could not load operator dashboard", error);
+            Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "Load Error",
+                    "Some operator data could not be loaded."));
+            return null;
+        });
+    }
 
+    private void ensureAuditTable() {
+        String sql = "CREATE TABLE IF NOT EXISTS OPERATOR_AUDIT_LOG (" +
+                "audit_id BIGINT AUTO_INCREMENT PRIMARY KEY, operator_user_id INT NOT NULL, " +
+                "action VARCHAR(80) NOT NULL, entity_type VARCHAR(40) NOT NULL, entity_id INT NOT NULL, " +
+                "details VARCHAR(500), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)";
+        try (Connection c = DatabaseConnection.getConnection(); Statement s = c.createStatement()) {
+            s.executeUpdate(sql);
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.log(Level.WARNING, "Audit log table is unavailable", e);
         }
+    }
+
+    private CompletableFuture<Void> loadRequests() {
+        return CompletableFuture.supplyAsync(this::fetchRequests, EXECUTOR).thenAccept(items ->
+                Platform.runLater(() -> {
+                    aidRequestList.setAll(items);
+                    updateSummaryStats();
+                }));
+    }
+
+    private CompletableFuture<Void> loadResources() {
+        return CompletableFuture.supplyAsync(this::fetchResources, EXECUTOR).thenAccept(items ->
+                Platform.runLater(() -> {
+                    resourceList.setAll(items);
+                    updateSummaryStats();
+                }));
+    }
+
+    private CompletableFuture<Void> loadAssignments() {
+        return CompletableFuture.supplyAsync(this::fetchAssignments, EXECUTOR).thenAccept(items ->
+                Platform.runLater(() -> {
+                    assignmentList.setAll(items);
+                    updateSummaryStats();
+                }));
+    }
+
+    private CompletableFuture<Void> loadDashboard() {
+        return CompletableFuture.supplyAsync(this::fetchDashboard, EXECUTOR).thenAccept(values ->
+                Platform.runLater(() -> updateDashboard(values)));
+    }
+
+    private List<Aid_Request> fetchRequests() {
+        List<Aid_Request> result = new java.util.ArrayList<>();
+        String query = "SELECT a.*, CONCAT(l.city, ', ', l.district) AS full_address " +
+                "FROM AID_REQUEST a LEFT JOIN LOCATION l ON a.location_id=l.location_id " +
+                "WHERE LOWER(a.status) <> 'fulfilled' ORDER BY a.created_at DESC";
+        try (Connection c = DatabaseConnection.getConnection(); PreparedStatement p = c.prepareStatement(query);
+             ResultSet rs = p.executeQuery()) {
+            while (rs.next()) result.add(new Aid_Request(rs.getInt("request_id"), rs.getInt("user_id"),
+                    rs.getInt("location_id"), rs.getString("full_address"), rs.getString("category"),
+                    rs.getString("urgency"), rs.getString("description"), rs.getString("status"),
+                    toDate(rs.getTimestamp("created_at"))));
+            return result;
+        } catch (SQLException e) { throw new RuntimeException(e); }
+    }
+
+    private List<Resource> fetchResources() {
+        List<Resource> result = new java.util.ArrayList<>();
+        try (Connection c = DatabaseConnection.getConnection();
+             PreparedStatement p = c.prepareStatement("SELECT * FROM RESOURCE ORDER BY created_at DESC");
+             ResultSet rs = p.executeQuery()) {
+            while (rs.next()) result.add(new Resource(rs.getInt("resource_id"), rs.getInt("user_id"),
+                    rs.getInt("location_id"), rs.getString("category"), rs.getInt("quantity"),
+                    rs.getString("description"), toDate(rs.getTimestamp("created_at"))));
+            return result;
+        } catch (SQLException e) { throw new RuntimeException(e); }
+    }
+
+    private List<Assignment> fetchAssignments() {
+        List<Assignment> result = new java.util.ArrayList<>();
+        try (Connection c = DatabaseConnection.getConnection();
+             PreparedStatement p = c.prepareStatement("SELECT * FROM ASSIGNMENT ORDER BY assigned_at DESC");
+             ResultSet rs = p.executeQuery()) {
+            while (rs.next()) result.add(new Assignment(rs.getInt("assignment_id"), rs.getInt("request_id"),
+                    rs.getInt("resource_id"), rs.getInt("assigned_quantity"), rs.getString("status"),
+                    toDate(rs.getTimestamp("assigned_at")), toDate(rs.getTimestamp("updated_at"))));
+            return result;
+        } catch (SQLException e) { throw new RuntimeException(e); }
+    }
+
+    private int[] fetchDashboard() {
+        int[] values = new int[4];
+        try (Connection c = DatabaseConnection.getConnection();
+             PreparedStatement p = c.prepareStatement("SELECT LOWER(category) category, COALESCE(SUM(quantity),0) total FROM RESOURCE GROUP BY LOWER(category)");
+             ResultSet rs = p.executeQuery()) {
+            while (rs.next()) {
+                String category = rs.getString("category"); int quantity = rs.getInt("total");
+                if (category.equals("food") || category.equals("water")) values[0] += quantity;
+                else if (category.equals("medicine") || category.equals("medical")) values[1] += quantity;
+                else if (category.equals("shelter")) values[2] += quantity;
+                else if (category.equals("clothing")) values[3] += quantity;
+            }
+            return values;
+        } catch (SQLException e) { throw new RuntimeException(e); }
     }
 
     private void setupActionButtons() {
-        colActions.setCellFactory(param -> new TableCell<>() {
-            private final Button btnAssign = new Button("Assign");
-
-            {
-                btnAssign.getStyleClass().add("btn-table-primary");
-
-                btnAssign.setOnAction(event -> {
-                    Aid_Request request = getTableView().getItems().get(getIndex());
-                    openAssignmentDialog(request);
-                });
+        colActions.setCellFactory(ignored -> new TableCell<>() {
+            private final Button assign = new Button("Assign");
+            private final Button edit = new Button("Edit");
+            private final Button delete = new Button("Delete");
+            private final HBox pane = new HBox(7, assign, edit, delete);
+            { assign.getStyleClass().add("btn-table-primary"); edit.getStyleClass().add("btn-table-secondary"); delete.getStyleClass().add("btn-table-danger");
+              assign.setOnAction(e -> {
+                Aid_Request item = getTableView().getItems().get(getIndex());
+                if (item != null) openAssignmentDialog(item);
+              });
+              edit.setOnAction(e -> openEditRequestDialog(getTableView().getItems().get(getIndex())));
+              delete.setOnAction(e -> confirmDeleteRequest(getTableView().getItems().get(getIndex())));
             }
-
-            @Override
-            protected void updateItem(Void item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty) {
-                    setGraphic(null);
-                } else {
-                    // HBox yerine doğrudan sadece butonu gösteriyoruz
-                    setGraphic(btnAssign);
-                }
+            @Override protected void updateItem(Void item, boolean empty) {
+                super.updateItem(item, empty); Aid_Request request = empty ? null : getTableView().getItems().get(getIndex());
+                assign.setDisable(request == null || !PENDING.equals(lower(request.getStatus())));
+                edit.setDisable(request == null);
+                delete.setDisable(request == null);
+                setGraphic(empty ? null : pane);
             }
         });
-    }
-
-    private void loadResources() {
-        resourceList.clear();
-        String query = "SELECT * FROM RESOURCE ORDER BY created_at DESC";
-
-        try (Connection conn = DatabaseConnection.getConnection(); Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(query)) {
-
-            while (rs.next()) {
-                Resource res = new Resource(rs.getInt("resource_id"), rs.getInt("user_id"), rs.getInt("location_id"), rs.getString("category"), rs.getInt("quantity"), rs.getString("description"), rs.getTimestamp("created_at").toLocalDateTime());
-                resourceList.add(res);
-            }
-
-
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
     }
 
     private void setupResourceActionButtons() {
-        colResActions.setCellFactory(param -> new TableCell<>() {
-            private final Button btnEdit = new Button("Edit");
-            private final Button btnDelete = new Button("Delete");
-            private final HBox pane = new HBox(6, btnEdit, btnDelete);
-
-            {
-                btnEdit.getStyleClass().add("btn-table-primary");
-                btnDelete.getStyleClass().add("btn-table-danger");
-
-                btnEdit.setOnAction(event -> {
-                    Resource res = getTableView().getItems().get(getIndex());
-                    openEditResourceDialog(res);
-                });
-
-                btnDelete.setOnAction(event -> {
-                    Resource res = getTableView().getItems().get(getIndex());
-                    System.out.println("Deleting Resource RES-" + res.getResourceId());
-                    deleteResourceFromDatabase(res.getResourceId());
-                });
-            }
-
-            @Override
-            protected void updateItem(Void item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty) {
-                    setGraphic(null);
-                } else {
-                    setGraphic(pane);
-                }
-            }
+        colResActions.setCellFactory(ignored -> new TableCell<>() {
+            private final Button edit = new Button("Edit"), delete = new Button("Delete");
+            private final HBox pane = new HBox(7, edit, delete);
+            { edit.getStyleClass().add("btn-table-primary"); delete.getStyleClass().add("btn-table-danger");
+              edit.setOnAction(e -> openEditResourceDialog(getTableView().getItems().get(getIndex())));
+              delete.setOnAction(e -> confirmDelete(getTableView().getItems().get(getIndex()))); }
+            @Override protected void updateItem(Void item, boolean empty) { super.updateItem(item, empty); setGraphic(empty ? null : pane); }
         });
-    }
-
-    private void loadAssignments() {
-        assignmentList.clear();
-        String query = "SELECT * FROM ASSIGNMENT ORDER BY assigned_at DESC";
-
-        try (Connection conn = DatabaseConnection.getConnection(); Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(query)) {
-
-            while (rs.next()) {
-                Assignment asn = new Assignment(rs.getInt("assignment_id"), rs.getInt("request_id"), rs.getInt("resource_id"), rs.getInt("assigned_quantity"), rs.getString("status"), rs.getTimestamp("assigned_at").toLocalDateTime(), rs.getTimestamp("updated_at") != null ? rs.getTimestamp("updated_at").toLocalDateTime() : null);
-                assignmentList.add(asn);
-            }
-            assignmentTable.setItems(assignmentList);
-
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
     }
 
     private void setupAssignmentActionButtons() {
-        colAsnActions.setCellFactory(param -> new TableCell<>() {
-            private final Button btnUpdate = new Button("Update");
-            private final Button btnCancel = new Button("Cancel");
-            private final HBox pane = new HBox(6, btnUpdate, btnCancel);
-
-            {
-                btnUpdate.getStyleClass().add("btn-table-primary");
-                btnCancel.getStyleClass().add("btn-table-danger");
-
-                btnUpdate.setOnAction(event -> {
-                    Assignment asn = getTableView().getItems().get(getIndex());
-                    openUpdateAssignmentDialog(asn);
-                });
-
-                btnCancel.setOnAction(event -> {
-                    Assignment asn = getTableView().getItems().get(getIndex());
-                    System.out.println("Canceling Assignment ASN-" + asn.getAssignmentId());
-
-                    // Call the new Refund transaction!
-                    cancelAndRefundAssignment(asn.getAssignmentId());
-                });
-            }
-
-            @Override
-            protected void updateItem(Void item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty) {
-                    setGraphic(null);
-                } else {
-                    setGraphic(pane);
-                }
-            }
+        colAsnActions.setCellFactory(ignored -> new TableCell<>() {
+            private final Button update = new Button("Update"), cancel = new Button("Cancel");
+            private final HBox pane = new HBox(7, update, cancel);
+            { update.getStyleClass().add("btn-table-primary"); cancel.getStyleClass().add("btn-table-danger");
+              update.setOnAction(e -> openUpdateAssignmentDialog(getTableView().getItems().get(getIndex())));
+              cancel.setOnAction(e -> confirmCancel(getTableView().getItems().get(getIndex()))); }
+            @Override protected void updateItem(Void item, boolean empty) { super.updateItem(item, empty);
+                Assignment a = empty ? null : getTableView().getItems().get(getIndex());
+                boolean closed = a == null || DELIVERED.equals(lower(a.getStatus()));
+                update.setDisable(closed); cancel.setDisable(closed); setGraphic(empty ? null : pane); }
         });
-    }
-
-    private void updateDashboardStats() {
-        double TARGET_FOOD_WATER = 250000.0;
-        double TARGET_MEDICAL = 250000.0;
-        double TARGET_SHELTER = 250000.0;
-        double TARGET_CLOTHING = 250000.0;
-
-        String query = "SELECT category, SUM(quantity) AS total_qty FROM RESOURCE GROUP BY category";
-
-        try (Connection conn = DatabaseConnection.getConnection(); Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(query)) {
-
-            int totalFoodWater = 0;
-            int totalMed = 0;
-            int totalShelter = 0;
-            int totalClothing = 0;
-
-            while (rs.next()) {
-                String cat = rs.getString("category").toLowerCase();
-                int qty = rs.getInt("total_qty");
-
-                if (cat.equals("food") || cat.equals("water")) {
-                    totalFoodWater += qty;
-                } else if (cat.equals("medicine") || cat.equals("medical")) {
-                    totalMed += qty;
-                } else if (cat.equals("shelter")) {
-                    totalShelter += qty;
-                } else if (cat.equals("clothing")) {
-                    totalClothing += qty;
-                }
-            }
-
-            foodStockLabel.setText(totalFoodWater + " Units");
-            medStockLabel.setText(totalMed + " Units");
-            shelterStockLabel.setText(totalShelter + " Kits");
-            clothingStockLabel.setText(totalClothing + " Sets");
-
-            foodProgressBar.setProgress(Math.min(1.0, totalFoodWater / TARGET_FOOD_WATER));
-            medProgressBar.setProgress(Math.min(1.0, totalMed / TARGET_MEDICAL));
-            shelterProgressBar.setProgress(Math.min(1.0, totalShelter / TARGET_SHELTER));
-            clothingProgressBar.setProgress(Math.min(1.0, totalClothing / TARGET_CLOTHING));
-
-
-            double foodPct = Math.min(1.0, totalFoodWater / TARGET_FOOD_WATER);
-            double medPct = Math.min(1.0, totalMed / TARGET_MEDICAL);
-            double shelterPct = Math.min(1.0, totalShelter / TARGET_SHELTER);
-            double clothingPct = Math.min(1.0, totalClothing / TARGET_CLOTHING);
-
-            foodProgressBar.setProgress(foodPct);
-            medProgressBar.setProgress(medPct);
-            shelterProgressBar.setProgress(shelterPct);
-            clothingProgressBar.setProgress(clothingPct);
-
-            updateBadge(foodBadge, foodPct);
-            updateBadge(medBadge, medPct);
-            updateBadge(shelterBadge, shelterPct);
-            updateBadge(clothingBadge, clothingPct);
-
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void deleteResourceFromDatabase(int resourceId) {
-        String query = "DELETE FROM RESOURCE WHERE resource_id = ?";
-
-        try (Connection conn = DatabaseConnection.getConnection(); PreparedStatement pstmt = conn.prepareStatement(query)) {
-
-            pstmt.setInt(1, resourceId);
-            pstmt.executeUpdate();
-
-            System.out.println("Successfully deleted from database.");
-
-
-            loadResources();
-            updateDashboardStats();
-
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
     }
 
     private void openAssignmentDialog(Aid_Request request) {
-        TextInputDialog resourceDialog = new TextInputDialog();
-        resourceDialog.setTitle("Assign Resource");
-        resourceDialog.setHeaderText("Assigning resource for Request #REQ-" + request.getRequestId() + "\nCategory Needed: " + request.getCategory());
-        resourceDialog.setContentText("Enter the Resource ID (e.g., 6):");
-
-        Optional<String> resIdResult = resourceDialog.showAndWait();
-        if (resIdResult.isPresent() && !resIdResult.get().trim().isEmpty()) {
-
-            TextInputDialog qtyDialog = new TextInputDialog();
-            qtyDialog.setTitle("Assign Quantity");
-            qtyDialog.setHeaderText("Resource #" + resIdResult.get() + " selected.");
-            qtyDialog.setContentText("Enter quantity to assign:");
-
-            Optional<String> qtyResult = qtyDialog.showAndWait();
-            if (qtyResult.isPresent() && !qtyResult.get().trim().isEmpty()) {
-
-                try {
-                    int resourceId = Integer.parseInt(resIdResult.get().trim());
-                    int quantity = Integer.parseInt(qtyResult.get().trim());
-
-                    executeAssignmentTransaction(request.getRequestId(), resourceId, quantity);
-
-                } catch (NumberFormatException e) {
-                    System.out.println("Invalid number format entered.");
-                }
-            }
-        }
+        Dialog<ButtonType> dialog = new Dialog<>(); dialog.setTitle("Assign Resource");
+        dialog.setHeaderText("Request #REQ-" + request.getRequestId() + " / " + upper(request.getCategory()));
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        TextField resourceId = new TextField(); resourceId.setPromptText("Resource ID");
+        TextField quantity = new TextField("1"); quantity.setPromptText("Quantity");
+        javafx.scene.layout.VBox box = new javafx.scene.layout.VBox(8, new Label("Resource ID"), resourceId,
+                new Label("Quantity"), quantity); box.setPrefWidth(320); dialog.getDialogPane().setContent(box);
+        dialog.showAndWait().ifPresent(result -> { if (result == ButtonType.OK) {
+            try { int rid = Integer.parseInt(resourceId.getText().trim()); int qty = Integer.parseInt(quantity.getText().trim());
+                if (rid <= 0 || qty <= 0) throw new NumberFormatException();
+                runMutation(() -> assignTransaction(request.getRequestId(), rid, qty));
+            } catch (NumberFormatException e) { showAlert(Alert.AlertType.WARNING, "Invalid Input", "IDs and quantity must be positive numbers."); }
+        }});
     }
 
-    private void executeAssignmentTransaction(int requestId, int resourceId, int quantity) {
-        String insertAssignment = "INSERT INTO ASSIGNMENT (request_id, resource_id, assigned_quantity, status) VALUES (?, ?, ?, 'Assigned')";
-        String updateResource = "UPDATE RESOURCE SET quantity = quantity - ? WHERE resource_id = ?";
-        String updateRequest = "UPDATE AID_REQUEST SET status = 'FULFILLED' WHERE request_id = ?";
-
-        try (Connection conn = DatabaseConnection.getConnection()) {
-
-            conn.setAutoCommit(false);
-
-            try (PreparedStatement stmtAsn = conn.prepareStatement(insertAssignment); PreparedStatement stmtRes = conn.prepareStatement(updateResource); PreparedStatement stmtReq = conn.prepareStatement(updateRequest)) {
-
-                stmtAsn.setInt(1, requestId);
-                stmtAsn.setInt(2, resourceId);
-                stmtAsn.setInt(3, quantity);
-                stmtAsn.executeUpdate();
-
-                stmtRes.setInt(1, quantity);
-                stmtRes.setInt(2, resourceId);
-                stmtRes.executeUpdate();
-
-                stmtReq.setInt(1, requestId);
-                stmtReq.executeUpdate();
-
-                conn.commit();
-                System.out.println("Assignment successful!");
-
-                loadAidRequests();
-                loadResources();
-                loadAssignments();
-                updateDashboardStats();
-
-            } catch (SQLException ex) {
-                conn.rollback();
-                ex.printStackTrace();
+    private void openEditRequestDialog(Aid_Request request) {
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("Edit Aid Request");
+        dialog.setHeaderText("REQ-" + request.getRequestId());
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        TextField category = new TextField(safe(request.getCategory()));
+        ComboBox<String> urgency = new ComboBox<>(FXCollections.observableArrayList("HIGH", "MEDIUM", "LOW"));
+        urgency.setValue(upper(request.getUrgency()));
+        ComboBox<String> status = new ComboBox<>(FXCollections.observableArrayList("Pending", "In Progress", "Fulfilled", "Cancelled"));
+        status.setValue(statusValue(request.getStatus()));
+        TextArea description = new TextArea(safe(request.getDescription()));
+        description.setWrapText(true); description.setPrefRowCount(4);
+        VBox content = new VBox(8, new Label("Category"), category, new Label("Urgency"), urgency,
+                new Label("Status"), status, new Label("Description"), description);
+        content.setPrefWidth(380); dialog.getDialogPane().setContent(content);
+        dialog.showAndWait().ifPresent(result -> {
+            if (result != ButtonType.OK) return;
+            if (category.getText().isBlank() || urgency.getValue() == null || status.getValue() == null
+                    || description.getText().isBlank()) {
+                showAlert(Alert.AlertType.WARNING, "Invalid Input", "All request fields are required.");
+                return;
             }
-
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void openEditResourceDialog(Resource res) {
-        TextInputDialog dialog = new TextInputDialog(String.valueOf(res.getQuantity()));
-        dialog.setTitle("Edit Resource Inventory");
-        dialog.setHeaderText("Editing RES-" + res.getResourceId() + " (" + res.getCategory() + ")");
-        dialog.setContentText("Enter the new total quantity:");
-
-        Optional<String> result = dialog.showAndWait();
-        result.ifPresent(qtyStr -> {
-            try {
-                int newQty = Integer.parseInt(qtyStr.trim());
-                updateResourceQuantityInDatabase(res.getResourceId(), newQty);
-            } catch (NumberFormatException e) {
-                System.out.println("Invalid number entered.");
-            }
+            runMutation(() -> updateRequest(request.getRequestId(), category.getText().trim(),
+                    urgency.getValue(), status.getValue(), description.getText().trim()));
         });
     }
 
-    private void updateResourceQuantityInDatabase(int resourceId, int newQuantity) {
-        String query = "UPDATE RESOURCE SET quantity = ? WHERE resource_id = ?";
-
-        try (Connection conn = DatabaseConnection.getConnection(); PreparedStatement pstmt = conn.prepareStatement(query)) {
-
-            pstmt.setInt(1, newQuantity);
-            pstmt.setInt(2, resourceId);
-            pstmt.executeUpdate();
-
-            loadResources();
-            updateDashboardStats();
-
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
+    private void updateRequest(int requestId, String category, String urgency, String status, String description) {
+        String sql = "UPDATE AID_REQUEST SET category=?, urgency=?, status=?, description=? WHERE request_id=?";
+        try (Connection c = DatabaseConnection.getConnection(); PreparedStatement p = c.prepareStatement(sql)) {
+            p.setString(1, category.toLowerCase(Locale.ROOT));
+            p.setString(2, urgency.toUpperCase(Locale.ROOT));
+            p.setString(3, status);
+            p.setString(4, description);
+            p.setInt(5, requestId);
+            if (p.executeUpdate() != 1) throw new SQLException("Request not found");
+            audit(c, "EDIT", "REQUEST", requestId, "status=" + status);
+        } catch (SQLException e) { throw new RuntimeException(e); }
     }
 
-    private void openUpdateAssignmentDialog(Assignment asn) {
-        List<String> statuses = Arrays.asList("Assigned", "On the Way", "Delivered");
-
-        ChoiceDialog<String> dialog = new ChoiceDialog<>(asn.getStatus(), statuses);
-        dialog.setTitle("Update Assignment Status");
-        dialog.setHeaderText("Updating status for ASN-" + asn.getAssignmentId());
-        dialog.setContentText("Select new status:");
-
-        Optional<String> result = dialog.showAndWait();
-        result.ifPresent(newStatus -> {
-            updateAssignmentStatusInDatabase(asn.getAssignmentId(), newStatus);
-        });
+    private void confirmDeleteRequest(Aid_Request request) {
+        if (confirm("Delete Aid Request", "Delete REQ-" + request.getRequestId() + "?"))
+            runMutation(() -> deleteRequest(request.getRequestId()));
     }
 
-    private void updateAssignmentStatusInDatabase(int assignmentId, String newStatus) {
-        String query = "UPDATE ASSIGNMENT SET status = ? WHERE assignment_id = ?";
-
-        try (Connection conn = DatabaseConnection.getConnection(); PreparedStatement pstmt = conn.prepareStatement(query)) {
-
-            pstmt.setString(1, newStatus);
-            pstmt.setInt(2, assignmentId);
-            pstmt.executeUpdate();
-
-            loadAssignments();
-
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void cancelAndRefundAssignment(int assignmentId) {
-        String selectQuery = "SELECT resource_id, assigned_quantity FROM ASSIGNMENT WHERE assignment_id = ?";
-        String updateResourceQuery = "UPDATE RESOURCE SET quantity = quantity + ? WHERE resource_id = ?";
-        String deleteAssignmentQuery = "DELETE FROM ASSIGNMENT WHERE assignment_id = ?";
-
-        try (Connection conn = DatabaseConnection.getConnection()) {
-            conn.setAutoCommit(false);
-
+    private void deleteRequest(int requestId) {
+        try (Connection c = DatabaseConnection.getConnection()) {
+            c.setAutoCommit(false);
             try {
-                int resourceId = -1;
-                int refundQuantity = 0;
+                try (PreparedStatement deleteAssignments = c.prepareStatement("DELETE FROM ASSIGNMENT WHERE request_id=?")) {
+                    deleteAssignments.setInt(1, requestId);
+                    deleteAssignments.executeUpdate();
+                }
+                try (PreparedStatement delete = c.prepareStatement("DELETE FROM AID_REQUEST WHERE request_id=?")) {
+                    delete.setInt(1, requestId);
+                    if (delete.executeUpdate() != 1) throw new SQLException("Request not found");
+                }
+                audit(c, "DELETE", "REQUEST", requestId, "request removed");
+                c.commit();
+            } catch (SQLException e) { c.rollback(); throw e; }
+            finally { c.setAutoCommit(true); }
+        } catch (SQLException e) { throw new RuntimeException(e); }
+    }
 
-                try (PreparedStatement selectStmt = conn.prepareStatement(selectQuery)) {
-                    selectStmt.setInt(1, assignmentId);
-                    try (ResultSet rs = selectStmt.executeQuery()) {
-                        if (rs.next()) {
-                            resourceId = rs.getInt("resource_id");
-                            refundQuantity = rs.getInt("assigned_quantity");
-                        }
+    private String statusValue(String value) {
+        String normalized = lower(value);
+        if (normalized.equals(PENDING)) return "Pending";
+        if (normalized.equals(IN_PROGRESS)) return "In Progress";
+        if (normalized.equals(FULFILLED)) return "Fulfilled";
+        return "Cancelled";
+    }
+
+    private void assignTransaction(int requestId, int resourceId, int quantity) {
+        try (Connection c = DatabaseConnection.getConnection()) {
+            c.setAutoCommit(false);
+            try {
+                String category;
+                int resourceQuantity;
+                try (PreparedStatement p = c.prepareStatement("SELECT category, quantity FROM RESOURCE WHERE resource_id=? FOR UPDATE")) {
+                    p.setInt(1, resourceId); try (ResultSet rs = p.executeQuery()) {
+                        if (!rs.next()) throw new SQLException("Resource not found");
+                        category = rs.getString("category");
+                        resourceQuantity = rs.getInt("quantity");
                     }
                 }
-
-                if (resourceId != -1) {
-
-                    try (PreparedStatement updateStmt = conn.prepareStatement(updateResourceQuery)) {
-                        updateStmt.setInt(1, refundQuantity);
-                        updateStmt.setInt(2, resourceId);
-                        updateStmt.executeUpdate();
+                String requestCategory, status;
+                try (PreparedStatement p = c.prepareStatement("SELECT category,status FROM AID_REQUEST WHERE request_id=? FOR UPDATE")) {
+                    p.setInt(1, requestId); try (ResultSet rs = p.executeQuery()) {
+                        if (!rs.next()) throw new SQLException("Request not found");
+                        requestCategory = rs.getString("category"); status = rs.getString("status");
                     }
-
-                    try (PreparedStatement deleteStmt = conn.prepareStatement(deleteAssignmentQuery)) {
-                        deleteStmt.setInt(1, assignmentId);
-                        deleteStmt.executeUpdate();
-                    }
-
-                    conn.commit();
-                    System.out.println("Assignment canceled and resources refunded!");
-
-                    loadAssignments();
-                    loadResources();
-                    updateDashboardStats();
-
-                } else {
-                    conn.rollback();
                 }
+                if (!PENDING.equals(lower(status)) || !safe(category).equalsIgnoreCase(safe(requestCategory)))
+                    throw new SQLException("Request is not compatible with this resource");
+                try (PreparedStatement p = c.prepareStatement(
+                        "SELECT COALESCE(SUM(assigned_quantity),0) FROM ASSIGNMENT " +
+                                "WHERE resource_id=? AND LOWER(status) IN ('assigned','on the way')")) {
+                    p.setInt(1, resourceId);
+                    try (ResultSet rs = p.executeQuery()) {
+                        int reserved = rs.next() ? rs.getInt(1) : 0;
+                        if (reserved + quantity > resourceQuantity) throw new SQLException("Insufficient unreserved resource");
+                    }
+                }
+                try (PreparedStatement p = c.prepareStatement("SELECT COUNT(*) FROM ASSIGNMENT WHERE request_id=? AND LOWER(status) NOT IN ('delivered','cancelled')")) {
+                    p.setInt(1, requestId); try (ResultSet rs = p.executeQuery()) { if (rs.next() && rs.getInt(1) > 0) throw new SQLException("Request already assigned"); }
+                }
+                try (PreparedStatement p = c.prepareStatement("INSERT INTO ASSIGNMENT(request_id,resource_id,assigned_quantity,status) VALUES(?,?,?,'Assigned')")) {
+                    p.setInt(1, requestId); p.setInt(2, resourceId); p.setInt(3, quantity); p.executeUpdate();
+                }
+                try (PreparedStatement p = c.prepareStatement("UPDATE AID_REQUEST SET status='In Progress' WHERE request_id=? AND LOWER(status)='pending'")) {
+                    p.setInt(1, requestId); if (p.executeUpdate() != 1) throw new SQLException("Request status changed");
+                }
+                audit(c, "ASSIGN", "REQUEST", requestId, "resource=" + resourceId + ", quantity=" + quantity);
+                c.commit();
+            } catch (SQLException e) { c.rollback(); throw e; } finally { c.setAutoCommit(true); }
+        } catch (SQLException e) { throw new RuntimeException(e); }
+    }
 
-            } catch (SQLException ex) {
-                conn.rollback();
-                ex.printStackTrace();
+    private void openEditResourceDialog(Resource resource) {
+        Dialog<ButtonType> dialog = new Dialog<>(); dialog.setTitle("Edit Resource");
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        TextField quantity = new TextField(String.valueOf(resource.getQuantity()));
+        TextArea description = new TextArea(safe(resource.getDescription())); description.setWrapText(true); description.setPrefRowCount(3);
+        javafx.scene.layout.VBox box = new javafx.scene.layout.VBox(8, new Label("Quantity"), quantity, new Label("Description"), description);
+        box.setPrefWidth(350); dialog.getDialogPane().setContent(box);
+        dialog.showAndWait().ifPresent(result -> { if (result == ButtonType.OK) try {
+            int value = Integer.parseInt(quantity.getText().trim()); if (value < 0) throw new NumberFormatException();
+            runMutation(() -> updateResource(resource.getResourceId(), value, description.getText().trim()));
+        } catch (NumberFormatException e) { showAlert(Alert.AlertType.WARNING, "Invalid Input", "Quantity must be zero or greater."); }});
+    }
+
+    private void updateResource(int resourceId, int quantity, String description) {
+        try (Connection c = DatabaseConnection.getConnection(); PreparedStatement p = c.prepareStatement(
+                "UPDATE RESOURCE SET quantity=?,description=? WHERE resource_id=?")) {
+            try (PreparedStatement reserved = c.prepareStatement("SELECT COALESCE(SUM(assigned_quantity),0) FROM ASSIGNMENT WHERE resource_id=? AND LOWER(status) IN ('assigned','on the way')")) {
+                reserved.setInt(1, resourceId); try (ResultSet rs = reserved.executeQuery()) {
+                    if (rs.next() && quantity < rs.getInt(1)) throw new SQLException("Quantity is below reserved amount");
+                }
             }
+            p.setInt(1, quantity); p.setString(2, description); p.setInt(3, resourceId);
+            if (p.executeUpdate() != 1) throw new SQLException("Resource not found");
+            audit(c, "EDIT", "RESOURCE", resourceId, "quantity=" + quantity);
+        } catch (SQLException e) { throw new RuntimeException(e); }
+    }
 
+    private void confirmDelete(Resource resource) {
+        if (confirm("Delete Resource", "Delete RES-" + resource.getResourceId() + "?"))
+            runMutation(() -> deleteResource(resource.getResourceId()));
+    }
+
+    private void deleteResource(int resourceId) {
+        try (Connection c = DatabaseConnection.getConnection()) {
+            c.setAutoCommit(false);
+            try {
+                try (PreparedStatement p = c.prepareStatement(
+                        "UPDATE AID_REQUEST req JOIN ASSIGNMENT a ON a.request_id=req.request_id " +
+                                "SET req.status='Pending' WHERE a.resource_id=? " +
+                                "AND LOWER(a.status) NOT IN ('delivered','cancelled') " +
+                                "AND LOWER(req.status)='in progress'")) {
+                    p.setInt(1, resourceId);
+                    p.executeUpdate();
+                }
+                try (PreparedStatement p = c.prepareStatement("DELETE FROM ASSIGNMENT WHERE resource_id=?")) {
+                    p.setInt(1, resourceId);
+                    p.executeUpdate();
+                }
+                try (PreparedStatement p = c.prepareStatement("DELETE FROM RESOURCE WHERE resource_id=?")) {
+                    p.setInt(1, resourceId);
+                    if (p.executeUpdate() != 1) throw new SQLException("Resource not found");
+                }
+                audit(c, "DELETE", "RESOURCE", resourceId, "resource and linked assignments removed");
+                c.commit();
+            } catch (SQLException e) {
+                c.rollback();
+                throw e;
+            } finally {
+                c.setAutoCommit(true);
+            }
+        } catch (SQLException e) { throw new RuntimeException(e); }
+    }
+
+    private void openUpdateAssignmentDialog(Assignment assignment) {
+        List<String> statuses = List.of("Assigned", "On the Way", "Delivered");
+        ChoiceDialog<String> dialog = new ChoiceDialog<>(assignment.getStatus(), statuses);
+        dialog.setTitle("Update Assignment"); dialog.setHeaderText("ASN-" + assignment.getAssignmentId());
+        dialog.setContentText("New status:"); dialog.showAndWait().ifPresent(status -> runMutation(() -> updateAssignment(assignment.getAssignmentId(), status)));
+    }
+
+    private void updateAssignment(int assignmentId, String newStatus) {
+        try (Connection c = DatabaseConnection.getConnection()) {
+            c.setAutoCommit(false);
+            try {
+                int requestId, resourceId, quantity; String oldStatus;
+                try (PreparedStatement p = c.prepareStatement("SELECT request_id,resource_id,assigned_quantity,status FROM ASSIGNMENT WHERE assignment_id=? FOR UPDATE")) {
+                    p.setInt(1, assignmentId); try (ResultSet rs = p.executeQuery()) { if (!rs.next()) throw new SQLException("Assignment not found");
+                        requestId=rs.getInt(1); resourceId=rs.getInt(2); quantity=rs.getInt(3); oldStatus=rs.getString(4); }
+                }
+                validateTransition(oldStatus, newStatus);
+                if (DELIVERED.equals(lower(newStatus)) && !DELIVERED.equals(lower(oldStatus))) {
+                    try (PreparedStatement p = c.prepareStatement("UPDATE RESOURCE SET quantity=quantity-? WHERE resource_id=? AND quantity>=?")) {
+                        p.setInt(1, quantity); p.setInt(2, resourceId); p.setInt(3, quantity); if (p.executeUpdate()!=1) throw new SQLException("Insufficient resource quantity");
+                    }
+                    try (PreparedStatement p = c.prepareStatement("UPDATE AID_REQUEST SET status='Fulfilled' WHERE request_id=?")) { p.setInt(1, requestId); p.executeUpdate(); }
+                }
+                try (PreparedStatement p = c.prepareStatement("UPDATE ASSIGNMENT SET status=? WHERE assignment_id=?")) { p.setString(1,newStatus); p.setInt(2,assignmentId); p.executeUpdate(); }
+                audit(c, "STATUS_CHANGE", "ASSIGNMENT", assignmentId, "status=" + newStatus);
+                c.commit();
+            } catch (SQLException e) { c.rollback(); throw e; } finally { c.setAutoCommit(true); }
+        } catch (SQLException e) { throw new RuntimeException(e); }
+    }
+
+    private void validateTransition(String oldStatus, String newStatus) throws SQLException {
+        String oldValue=lower(oldStatus), newValue=lower(newStatus);
+        if (DELIVERED.equals(oldValue) || !(ASSIGNED.equals(newValue) || ON_THE_WAY.equals(newValue) || DELIVERED.equals(newValue)))
+            throw new SQLException("Invalid assignment status transition");
+        if (ASSIGNED.equals(oldValue) && DELIVERED.equals(newValue)) throw new SQLException("Assignment must be On the Way first");
+    }
+
+    private void confirmCancel(Assignment assignment) {
+        if (confirm("Cancel Assignment", "Cancel ASN-" + assignment.getAssignmentId() + "?"))
+            runMutation(() -> cancelAssignment(assignment.getAssignmentId()));
+    }
+
+    private void cancelAssignment(int assignmentId) {
+        try (Connection c = DatabaseConnection.getConnection()) {
+            c.setAutoCommit(false);
+            try {
+                int requestId; String status;
+                try (PreparedStatement p = c.prepareStatement("SELECT request_id,status FROM ASSIGNMENT WHERE assignment_id=? FOR UPDATE")) {
+                    p.setInt(1,assignmentId); try(ResultSet rs=p.executeQuery()){ if(!rs.next()) throw new SQLException("Assignment not found"); requestId=rs.getInt(1); status=rs.getString(2); }
+                }
+                if (DELIVERED.equals(lower(status))) throw new SQLException("Delivered assignment cannot be cancelled");
+                try (PreparedStatement p=c.prepareStatement("DELETE FROM ASSIGNMENT WHERE assignment_id=?")){p.setInt(1,assignmentId);p.executeUpdate();}
+                try (PreparedStatement p=c.prepareStatement("UPDATE AID_REQUEST SET status='Pending' WHERE request_id=? AND LOWER(status)='in progress' AND NOT EXISTS (SELECT 1 FROM ASSIGNMENT WHERE request_id=? AND LOWER(status) NOT IN ('delivered','cancelled'))")){p.setInt(1,requestId);p.setInt(2,requestId);p.executeUpdate();}
+                audit(c, "CANCEL", "ASSIGNMENT", assignmentId, "request=" + requestId);
+                c.commit();
+            } catch(SQLException e){c.rollback();throw e;} finally{c.setAutoCommit(true);}
+        } catch(SQLException e){throw new RuntimeException(e);}
+    }
+
+    private void runMutation(Runnable mutation) {
+        CompletableFuture.runAsync(mutation, EXECUTOR).thenRun(() -> Platform.runLater(this::loadAllData))
+                .exceptionally(error -> { LOGGER.log(Level.WARNING,"Operator mutation failed",error); Platform.runLater(() -> showAlert(Alert.AlertType.ERROR,"Operation Failed", rootMessage(error))); return null; });
+    }
+
+    private void audit(Connection connection, String action, String entityType, int entityId, String details) {
+        AuthService.UserSession session = AuthService.getActiveSession();
+        if (session == null) return;
+        String sql = "INSERT INTO OPERATOR_AUDIT_LOG(operator_user_id,action,entity_type,entity_id,details) VALUES(?,?,?,?,?)";
+        try (PreparedStatement p = connection.prepareStatement(sql)) {
+            p.setInt(1, session.userId); p.setString(2, action); p.setString(3, entityType);
+            p.setInt(4, entityId); p.setString(5, details); p.executeUpdate();
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.log(Level.WARNING, "Could not write operator audit event", e);
         }
     }
 
-    private void updateBadge(Label badge, double percentage) {
-        if (percentage >= 0.5) {
-            badge.setText("Stable");
-        } else if (percentage >= 0.2) {
-            badge.setText("Low Stock");
-        } else {
-            badge.setText("Critical");
-        }
+    private void updateDashboard(int[] values) {
+        updateCard(values[0], foodStockLabel, foodProgressBar, foodStatusBadge, foodPercentLabel, "Units");
+        updateCard(values[1], medStockLabel, medProgressBar, medStatusBadge, medPercentLabel, "Units");
+        updateCard(values[2], shelterStockLabel, shelterProgressBar, shelterStatusBadge, shelterPercentLabel, "Kits");
+        updateCard(values[3], clothingStockLabel, clothingProgressBar, clothingStatusBadge, clothingPercentLabel, "Sets");
     }
 
-    private void showAlert(Alert.AlertType type, String title, String message) {
-        Alert alert = new Alert(type);
-        alert.setTitle(title);
-        alert.setHeaderText(null);
-        alert.setContentText(message);
-        alert.showAndWait();
+    private void updateSummaryStats() {
+        if (statActiveReqsLabel != null) statActiveReqsLabel.setText(String.valueOf(aidRequestList.size()));
+        if (statPendingAsnLabel != null) {
+            long pending = assignmentList.stream()
+                    .filter(item -> ASSIGNED.equals(lower(item.getStatus())) || ON_THE_WAY.equals(lower(item.getStatus())))
+                    .count();
+            statPendingAsnLabel.setText(String.valueOf(pending));
+        }
+        if (statDepotsLabel != null) {
+            long locations = resourceList.stream().map(Resource::getLocationId).distinct().count();
+            statDepotsLabel.setText(locations + " Active");
+        }
     }
+    private void updateCard(int value, Label label, ProgressBar bar, Label badge, Label percent, String unit) {
+        double percentage=Math.min(1.0,value/250000.0);
+        label.setText(value+" "+unit);
+        bar.setProgress(percentage);
+        updateBadge(badge, percentage);
+        percent.setText(Math.round(percentage * 100) + "%");
+    }
+    private void updateBadge(Label badge,double percentage){badge.setText(percentage>=.5?"STABLE":percentage>=.2?"MODERATE":"CRITICAL");}
+
+    @FXML private void handleLogout(ActionEvent event) {
+        try { AuthService.clearSession(); Parent root=FXMLLoader.load(getClass().getResource("/com/pnrl/crisasterhub/fxml/login.fxml")); Stage stage=(Stage)((Node)event.getSource()).getScene().getWindow(); stage.setScene(new Scene(root)); stage.setFullScreen(true); }
+        catch(IOException e){LOGGER.log(Level.WARNING,"Could not return to login",e);showAlert(Alert.AlertType.ERROR,"System Error","Could not return to login screen.");}
+    }
+
+    private static String safe(String value){return value==null||value.isBlank()?"-":value;}
+    private static String upper(String value){return safe(value).toUpperCase(Locale.ROOT);}
+    private static String lower(String value){return value==null?"":value.trim().toLowerCase(Locale.ROOT);}
+    private static boolean contains(Object value,String filter){return String.valueOf(value==null?"":value).toLowerCase(Locale.ROOT).contains(filter);}
+    private static SimpleStringProperty text(String value){return new SimpleStringProperty(value);}
+    private static String format(LocalDateTime value){return value==null?"-":value.toString();}
+    private static LocalDateTime toDate(Timestamp value){return value==null?null:value.toLocalDateTime();}
+    private String urgencyClass(String value){String v=lower(value);return v.contains("high")||v.contains("critical")?"badge-critical":v.contains("medium")||v.contains("urgent")?"badge-urgent":"badge-moderate";}
+    private String statusClass(String value){String v=lower(value);return v.equals(PENDING)?"badge-pending":v.equals(FULFILLED)||v.equals(DELIVERED)?"badge-completed":v.equals(IN_PROGRESS)||v.equals(ON_THE_WAY)?"badge-active":"badge-open";}
+    private boolean confirm(String title,String message){Alert alert=new Alert(Alert.AlertType.CONFIRMATION,message,ButtonType.OK,ButtonType.CANCEL);alert.setTitle(title);return alert.showAndWait().orElse(ButtonType.CANCEL)==ButtonType.OK;}
+    private String rootMessage(Throwable error){Throwable cause=error;while(cause.getCause()!=null)cause=cause.getCause();return safe(cause.getMessage());}
+    private void showAlert(Alert.AlertType type,String title,String message){Alert alert=new Alert(type);alert.setTitle(title);alert.setHeaderText(null);alert.setContentText(message);alert.showAndWait();}
 }

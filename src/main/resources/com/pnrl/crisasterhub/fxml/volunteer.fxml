@@ -16,8 +16,9 @@
 <?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
 <?import javafx.scene.shape.SVGPath?>
+<?import javafx.scene.web.WebView?>
 
-<BorderPane prefHeight="900.0" prefWidth="1360.0" styleClass="root-canvas" stylesheets="@../css/volunteer.css" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.pnrl.crisasterhub.VolunteerController">
+<BorderPane prefHeight="900.0" prefWidth="1360.0" styleClass="root-canvas" stylesheets="@../css/volunteer.css" xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.pnrl.crisasterhub.VolunteerController">
 
     <!-- TOP APP BAR -->
     <top>
@@ -78,6 +79,14 @@
                         <VBox spacing="8.0">
                             <Label styleClass="field-label" text="CATEGORY" />
                             <ComboBox fx:id="resourceCategoryCombo" maxWidth="Infinity" promptText="Select Category" styleClass="dark-combo" />
+                        </VBox>
+
+                        <VBox spacing="8.0">
+                            <Label styleClass="field-label" text="YOUR LOCATION" />
+                            <Label fx:id="volunteerMapStatusLabel" styleClass="map-status-text" text="CLICK MAP TO SET LOCATION" />
+                            <StackPane prefHeight="190.0" styleClass="map-container-frame">
+                                <WebView fx:id="volunteerMapWebView" prefHeight="190.0" />
+                            </StackPane>
                         </VBox>
 
                         <VBox spacing="8.0">

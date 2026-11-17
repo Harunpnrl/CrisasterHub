@@ -12,6 +12,7 @@ public class Aid_Request {
     private String status;
     private LocalDateTime createdAt;
     private String locationName;
+    private double distanceKm;
 
     public Aid_Request(int requestId, int userId, int locationId, String locationName, String category,
                        String urgency, String description, String status, LocalDateTime createdAt) {
@@ -62,4 +63,7 @@ public class Aid_Request {
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+    public double getDistanceKm() { return distanceKm; }
+    public void setDistanceKm(double distanceKm) { this.distanceKm = distanceKm; }
 }
