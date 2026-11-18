@@ -101,6 +101,9 @@ public class VolunteerController {
     private record ActiveTask(int assignmentId, int requestId, String category, String description,
                               String status, int quantity, String city, String district) {}
 
+    private record ResourceLocation(String category, int quantity, int reservedQuantity,
+                                    Double latitude, Double longitude, String city, String district) {}
+
     @FXML
     public void initialize() {
         ObservableList<String> categories = FXCollections.observableArrayList(
@@ -464,49 +467,108 @@ public class VolunteerController {
                 }))
                 .exceptionally(error -> {
                     LOGGER.log(Level.WARNING, "Failed to load available tasks", error);
+                    Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "Task Load Error",
+                            "Available tasks could not be loaded. Please check the database connection and location data."));
                     return null;
                 });
     }
 
     private java.util.List<Aid_Request> fetchAvailableTasks(int userId) {
         java.util.List<Aid_Request> tasks = new java.util.ArrayList<>();
-        String query = "SELECT DISTINCT req.request_id, req.user_id, req.location_id, req.category, " +
+        String requestQuery = "SELECT req.request_id, req.user_id, req.location_id, req.category, " +
                 "req.urgency, req.description, req.status, req.created_at, " +
-                "CONCAT(reqLoc.city, ', ', reqLoc.district) AS full_address, " +
-                "MIN(6371 * ACOS(LEAST(1, GREATEST(-1, " +
-                "COS(RADIANS(reqLoc.latitude)) * COS(RADIANS(resLoc.latitude)) * " +
-                "COS(RADIANS(resLoc.longitude) - RADIANS(reqLoc.longitude)) + " +
-                "SIN(RADIANS(reqLoc.latitude)) * SIN(RADIANS(resLoc.latitude))))) AS distance_km " +
+                "reqLoc.city, reqLoc.district, reqLoc.latitude, reqLoc.longitude " +
                 "FROM AID_REQUEST req JOIN LOCATION reqLoc ON req.location_id=reqLoc.location_id " +
-                "JOIN RESOURCE resource ON LOWER(resource.category)=LOWER(req.category) " +
-                "AND resource.user_id=? AND resource.quantity >= 1 + " +
-                "(SELECT COALESCE(SUM(reserved.assigned_quantity),0) FROM ASSIGNMENT reserved " +
+                "WHERE LOWER(req.status)='pending' AND req.user_id<>?";
+        String resourceQuery = "SELECT resource.category, resource.quantity, " +
+                "COALESCE((SELECT SUM(reserved.assigned_quantity) FROM ASSIGNMENT reserved " +
                 "WHERE reserved.resource_id=resource.resource_id " +
-                "AND LOWER(reserved.status) IN ('assigned','on the way')) " +
-                "JOIN LOCATION resLoc ON resource.location_id=resLoc.location_id " +
-                "WHERE LOWER(req.status)='pending' AND req.user_id<>? " +
-                "GROUP BY req.request_id, req.user_id, req.location_id, req.category, req.urgency, " +
-                "req.description, req.status, req.created_at, reqLoc.city, reqLoc.district " +
-                "HAVING distance_km <= " + VOLUNTEER_RADIUS_KM + " " +
-                "ORDER BY FIELD(LOWER(req.urgency), 'high', 'medium', 'low'), distance_km, req.created_at ASC";
+                "AND LOWER(reserved.status) IN ('assigned','on the way')),0) reserved_quantity, " +
+                "loc.latitude, loc.longitude, loc.city, loc.district " +
+                "FROM RESOURCE resource JOIN LOCATION loc ON resource.location_id=loc.location_id " +
+                "WHERE resource.user_id=? AND resource.quantity>0";
         try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement(query)) {
-            ps.setInt(1, userId);
-            ps.setInt(2, userId);
-            try (ResultSet rs = ps.executeQuery()) {
+             PreparedStatement requests = conn.prepareStatement(requestQuery);
+             PreparedStatement resources = conn.prepareStatement(resourceQuery)) {
+            requests.setInt(1, userId);
+            java.util.List<ResourceLocation> availableResources = new java.util.ArrayList<>();
+            resources.setInt(1, userId);
+            try (ResultSet rs = resources.executeQuery()) {
                 while (rs.next()) {
+                    availableResources.add(new ResourceLocation(rs.getString("category"),
+                            rs.getInt("quantity"), rs.getInt("reserved_quantity"),
+                            nullableDouble(rs, "latitude"), nullableDouble(rs, "longitude"),
+                            rs.getString("city"), rs.getString("district")));
+                }
+            }
+            try (ResultSet rs = requests.executeQuery()) {
+                while (rs.next()) {
+                    Double requestLatitude = nullableDouble(rs, "latitude");
+                    Double requestLongitude = nullableDouble(rs, "longitude");
+                    double nearestDistance = Double.MAX_VALUE;
+                    for (ResourceLocation resource : availableResources) {
+                        if (!safeText(resource.category()).equalsIgnoreCase(safeText(rs.getString("category")))
+                                || resource.quantity() - resource.reservedQuantity() < 1) continue;
+                        double distance = distanceKm(requestLatitude, requestLongitude,
+                                resource.latitude(), resource.longitude());
+                        boolean sameRegion = sameRegion(rs.getString("city"), rs.getString("district"),
+                                resource.city(), resource.district());
+                        if (distance <= VOLUNTEER_RADIUS_KM || sameRegion) {
+                            double effectiveDistance = distance == Double.MAX_VALUE ? 0 : distance;
+                            nearestDistance = Math.min(nearestDistance, effectiveDistance);
+                        }
+                    }
+                    if (nearestDistance == Double.MAX_VALUE) continue;
                     Aid_Request task = new Aid_Request(rs.getInt("request_id"), rs.getInt("user_id"),
-                            rs.getInt("location_id"), rs.getString("full_address"), rs.getString("category"),
-                            rs.getString("urgency"), rs.getString("description"), rs.getString("status"),
-                            rs.getTimestamp("created_at") == null ? null : rs.getTimestamp("created_at").toLocalDateTime());
-                    task.setDistanceKm(rs.getDouble("distance_km"));
+                            rs.getInt("location_id"), rs.getString("city") + ", " + rs.getString("district"),
+                            rs.getString("category"), rs.getString("urgency"), rs.getString("description"),
+                            rs.getString("status"), rs.getTimestamp("created_at") == null ? null :
+                            rs.getTimestamp("created_at").toLocalDateTime());
+                    task.setDistanceKm(nearestDistance == Double.MAX_VALUE ? 0 : nearestDistance);
                     tasks.add(task);
                 }
             }
+            tasks.sort(java.util.Comparator.comparingInt((Aid_Request task) -> urgencyRank(task.getUrgency()))
+                    .thenComparingDouble((Aid_Request task) -> task.getDistanceKm())
+                    .thenComparingInt((Aid_Request task) -> task.getRequestId()));
             return tasks;
         } catch (SQLException e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException("Could not load nearby tasks", e);
         }
+    }
+
+    private static Double nullableDouble(ResultSet resultSet, String column) throws SQLException {
+        double value = resultSet.getDouble(column);
+        return resultSet.wasNull() ? null : value;
+    }
+
+    private static double distanceKm(Double firstLatitude, Double firstLongitude,
+                                     Double secondLatitude, Double secondLongitude) {
+        if (firstLatitude == null || firstLongitude == null || secondLatitude == null || secondLongitude == null) {
+            return Double.MAX_VALUE;
+        }
+        double latDistance = Math.toRadians(secondLatitude - firstLatitude);
+        double lonDistance = Math.toRadians(secondLongitude - firstLongitude);
+        double a = Math.sin(latDistance / 2) * Math.sin(latDistance / 2)
+                + Math.cos(Math.toRadians(firstLatitude)) * Math.cos(Math.toRadians(secondLatitude))
+                * Math.sin(lonDistance / 2) * Math.sin(lonDistance / 2);
+        return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    private static boolean sameRegion(String requestCity, String requestDistrict,
+                                      String resourceCity, String resourceDistrict) {
+        return equalsRegion(requestCity, resourceCity) || equalsRegion(requestDistrict, resourceDistrict);
+    }
+
+    private static boolean equalsRegion(String first, String second) {
+        return first != null && second != null && !first.isBlank() && !second.isBlank()
+                && first.trim().equalsIgnoreCase(second.trim());
+    }
+
+    private static int urgencyRank(String urgency) {
+        if ("high".equalsIgnoreCase(urgency)) return 0;
+        if ("medium".equalsIgnoreCase(urgency)) return 1;
+        return 2;
     }
 
     private void renderAvailableTaskCards() {
@@ -566,8 +628,17 @@ public class VolunteerController {
                 }))
                 .exceptionally(error -> {
                     LOGGER.log(Level.WARNING, "Could not claim task", error);
-                    Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "Task Unavailable",
-                            "This task may already be claimed or no matching resource is available."));
+                    Throwable cause = error;
+                    while (cause.getCause() != null) cause = cause.getCause();
+                    String detail = cause.getMessage() == null ? "Unknown claim error" : cause.getMessage();
+                    String message = detail.toLowerCase(Locale.ROOT).contains("no longer pending")
+                            ? "This request has already been claimed or its status has changed."
+                            : detail.toLowerCase(Locale.ROOT).contains("no nearby")
+                            ? "Your available resource is not close enough to this request."
+                            : detail.toLowerCase(Locale.ROOT).contains("unreserved")
+                            ? "Your resource quantity is already reserved for another assignment."
+                            : "The task could not be claimed: " + detail;
+                    Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "Task Unavailable", message));
                     return null;
                 });
     }
@@ -589,30 +660,48 @@ public class VolunteerController {
                     throw new SQLException("Request is no longer pending");
                 }
 
-                int resourceId;
+                int resourceId = -1;
                 try (PreparedStatement resourceLock = conn.prepareStatement(
-                        "SELECT resource.resource_id FROM RESOURCE resource " +
+                        "SELECT resource.resource_id, resource.quantity, " +
+                                "COALESCE((SELECT SUM(reserved.assigned_quantity) FROM ASSIGNMENT reserved " +
+                                "WHERE reserved.resource_id=resource.resource_id " +
+                                "AND LOWER(reserved.status) IN ('assigned','on the way')),0) reserved_quantity, " +
+                                "resLoc.latitude resource_latitude, resLoc.longitude resource_longitude, " +
+                                "resLoc.city resource_city, resLoc.district resource_district, " +
+                                "reqLoc.latitude request_latitude, reqLoc.longitude request_longitude, " +
+                                "reqLoc.city request_city, reqLoc.district request_district " +
+                                "FROM RESOURCE resource " +
                                 "JOIN LOCATION resLoc ON resource.location_id=resLoc.location_id " +
                                 "JOIN AID_REQUEST req ON req.request_id=? " +
                                 "JOIN LOCATION reqLoc ON req.location_id=reqLoc.location_id " +
                                 "WHERE resource.user_id=? AND LOWER(resource.category)=LOWER(?) " +
-                                "AND resource.quantity >= 1 + (SELECT COALESCE(SUM(reserved.assigned_quantity),0) " +
-                                "FROM ASSIGNMENT reserved WHERE reserved.resource_id=resource.resource_id " +
-                                "AND LOWER(reserved.status) IN ('assigned','on the way')) " +
-                                "AND (6371 * ACOS(LEAST(1, GREATEST(-1, " +
-                                "COS(RADIANS(reqLoc.latitude))*COS(RADIANS(resLoc.latitude))*" +
-                                "COS(RADIANS(resLoc.longitude)-RADIANS(reqLoc.longitude))+" +
-                                "SIN(RADIANS(reqLoc.latitude))*SIN(RADIANS(resLoc.latitude))))) <= " + VOLUNTEER_RADIUS_KM + " " +
-                                "ORDER BY (6371 * ACOS(LEAST(1, GREATEST(-1, " +
-                                "COS(RADIANS(reqLoc.latitude))*COS(RADIANS(resLoc.latitude))*" +
-                                "COS(RADIANS(resLoc.longitude)-RADIANS(reqLoc.longitude))+" +
-                                "SIN(RADIANS(reqLoc.latitude))*SIN(RADIANS(resLoc.latitude))))) LIMIT 1 FOR UPDATE")) {
+                                "AND resource.quantity > 0 FOR UPDATE")) {
                     resourceLock.setInt(1, requestId);
                     resourceLock.setInt(2, userId);
                     resourceLock.setString(3, category);
                     try (ResultSet rs = resourceLock.executeQuery()) {
-                        if (!rs.next()) throw new SQLException("No matching resource available");
-                        resourceId = rs.getInt("resource_id");
+                        double nearestDistance = Double.MAX_VALUE;
+                        while (rs.next()) {
+                            int quantity = rs.getInt("quantity");
+                            int reserved = rs.getInt("reserved_quantity");
+                            if (quantity - reserved < 1) continue;
+                            Double requestLatitude = nullableDouble(rs, "request_latitude");
+                            Double requestLongitude = nullableDouble(rs, "request_longitude");
+                            Double resourceLatitude = nullableDouble(rs, "resource_latitude");
+                            Double resourceLongitude = nullableDouble(rs, "resource_longitude");
+                            double distance = distanceKm(requestLatitude, requestLongitude,
+                                    resourceLatitude, resourceLongitude);
+                            boolean sameRegion = sameRegion(rs.getString("request_city"),
+                                    rs.getString("request_district"), rs.getString("resource_city"),
+                                    rs.getString("resource_district"));
+                            double effectiveDistance = distance == Double.MAX_VALUE && sameRegion ? 0 : distance;
+                            if ((effectiveDistance <= VOLUNTEER_RADIUS_KM || sameRegion)
+                                    && effectiveDistance < nearestDistance) {
+                                nearestDistance = effectiveDistance;
+                                resourceId = rs.getInt("resource_id");
+                            }
+                        }
+                        if (resourceId < 0) throw new SQLException("No nearby unreserved resource available");
                     }
                 }
 

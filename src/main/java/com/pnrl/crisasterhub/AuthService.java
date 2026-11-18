@@ -12,8 +12,12 @@ import java.util.Base64;
 import java.nio.charset.StandardCharsets;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class AuthService {
+
+    private static final Logger LOGGER = Logger.getLogger(AuthService.class.getName());
 
     private static volatile UserSession activeSession;
 
@@ -35,7 +39,7 @@ public class AuthService {
 
     public static UserSession login(String identifier, String password, String requestedRole) {
         activeSession = null;
-        String selectQuery = "SELECT user_id, role, password FROM user " +
+        String selectQuery = "SELECT user_id, role, password FROM `USER` " +
                 "WHERE email = ? OR username = ? LIMIT 1";
 
         try (Connection conn = DatabaseConnection.getConnection();
@@ -49,11 +53,10 @@ public class AuthService {
                 String dbPassword = rs.getString("password");
 
                 if (!verifyPassword(password, dbPassword)) {
-                    System.out.println("Wrong password");
+                    LOGGER.info("Login rejected: invalid credentials");
                     return null;
                 }
 
-                // Eski düz metin kayıtları başarılı girişten sonra güvenli formata geçir.
                 if (dbPassword != null && !dbPassword.startsWith(HASH_PREFIX + "$")) {
                     upgradePasswordHash(conn, rs.getInt("user_id"), password);
                 }
@@ -70,15 +73,14 @@ public class AuthService {
             }
 
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.log(Level.WARNING, "Authentication database error", e);
             return null;
         }
         return null;
     }
 
-    public static UserSession registerAccount(String fullName, String username,
-                                              String email, String password) {
-        String insertQuery = "INSERT INTO user " +
+    public static UserSession registerAccount(String fullName, String username, String email, String password) {
+        String insertQuery = "INSERT INTO `USER` " +
                 "(full_name, username, email, password, role) VALUES (?, ?, ?, ?, ?)";
 
         try (Connection conn = DatabaseConnection.getConnection();
@@ -98,7 +100,7 @@ public class AuthService {
                 }
             }
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.log(Level.WARNING, "Could not register account", e);
         }
 
         return null;
@@ -124,7 +126,6 @@ public class AuthService {
         }
 
         if (!storedValue.startsWith(HASH_PREFIX + "$")) {
-            // Geçiş dönemi: eski düz metin kayıtlarını destekle.
             return MessageDigest.isEqual(
                     password.getBytes(StandardCharsets.UTF_8),
                     storedValue.getBytes(StandardCharsets.UTF_8));
@@ -158,7 +159,7 @@ public class AuthService {
 
     private static void upgradePasswordHash(Connection conn, int userId, String password)
             throws SQLException {
-        String updateQuery = "UPDATE user SET password = ? WHERE user_id = ?";
+        String updateQuery = "UPDATE `USER` SET password = ? WHERE user_id = ?";
         try (PreparedStatement statement = conn.prepareStatement(updateQuery)) {
             statement.setString(1, hashPassword(password));
             statement.setInt(2, userId);

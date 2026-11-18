@@ -6,8 +6,11 @@ import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class CrisasterHub extends Application {
+    private static final Logger LOGGER = Logger.getLogger(CrisasterHub.class.getName());
 
     @Override
     public void start(Stage primaryStage) {
@@ -27,8 +30,7 @@ public class CrisasterHub extends Application {
             primaryStage.setFullScreen(true);
 
         } catch (Exception e) {
-            e.printStackTrace();
-            System.err.println("An error occured while FXML loading.");
+            LOGGER.log(Level.SEVERE, "Application startup failed", e);
         }
     }
 

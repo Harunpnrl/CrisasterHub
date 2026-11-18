@@ -13,7 +13,7 @@
 <?import javafx.scene.shape.Circle?>
 <?import javafx.scene.shape.SVGPath?>
 
-<StackPane fx:id="rootPane" prefHeight="760.0" prefWidth="1024.0" styleClass="root-canvas" stylesheets="@../css/login.css" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.pnrl.crisasterhub.LoginController">
+<StackPane fx:id="rootPane" prefHeight="760.0" prefWidth="1024.0" styleClass="root-canvas" stylesheets="@../css/login.css" xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.pnrl.crisasterhub.LoginController">
 
     <!-- Arka Plan Dekoratif Glow Efektleri -->
     <StackPane mouseTransparent="true">

@@ -50,7 +50,6 @@ public class LoginController {
 
     @FXML
     public void initialize() {
-        System.out.println("Initializing App...");
 
         loginPasswordVisibleField.textProperty().bindBidirectional(loginPasswordField.textProperty());
 
@@ -243,7 +242,8 @@ public class LoginController {
             stage.centerOnScreen();
 
         } catch (IOException e) {
-            e.printStackTrace();
+            java.util.logging.Logger.getLogger(LoginController.class.getName())
+                    .log(java.util.logging.Level.WARNING, "Could not load dashboard", e);
             showAlert("System Error", "Could not load panel.");
         }
     }
