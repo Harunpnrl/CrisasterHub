@@ -163,8 +163,10 @@
     -fx-padding: 11px 14px;
 }
 
+.dark-textarea .scroll-pane,
+.dark-textarea .scroll-pane .viewport,
 .dark-textarea .content {
-    -fx-background-color: transparent;
+    -fx-background-color: #2b344b;
 }
 
 .dark-input:focused, .dark-textarea:focused, .dark-combo:focused {

@@ -189,8 +189,10 @@
     -fx-font-size: 13px;
 }
 
+.dark-textarea .scroll-pane,
+.dark-textarea .scroll-pane .viewport,
 .dark-textarea .content {
-    -fx-background-color: transparent;
+    -fx-background-color: rgba(43, 52, 75, 0.55);
     -fx-padding: 12px;
 }
 
